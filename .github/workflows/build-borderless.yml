@@ -61,20 +61,17 @@ jobs:
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
 
-          # v8 maps physical Win32 mouse messages into MVP's logical 800x600
-          # front-end and is confirmed working in menus. v9-v11 retain the
-          # borderless window guards. With dgVoodoo AppControlledScreenMode=false
-          # the window now behaves non-exclusive, but gameplay mouse input remains
-          # wrong. v12 recognizes the real 4:3 gameplay transition (1920x1440 on
-          # a 2560x1440 monitor), resets diagnostics there, and stops applying the
-          # menu coordinate transform during gameplay so raw client coordinates
-          # reach MVP unchanged.
+          # v12 is the known-good baseline: menu mouse scaling works and gameplay
+          # switches to raw queued Win32 mouse coordinates at the 4:3 transition.
+          # v13 changes only focus/minimize behavior so Alt-Tab can proceed without
+          # the Present/window guards immediately restoring the game HWND.
           python3 ../patches/apply_input_probe_v7.py
           python3 ../patches/apply_message_scale_v8.py
           python3 ../patches/apply_window_guard_v9.py
           python3 ../patches/apply_present_guard_v10.py
           python3 ../patches/apply_wndproc_geometry_guard_v11.py
           python3 ../patches/apply_gameplay_input_phase_v12.py
+          python3 ../patches/apply_alt_tab_focus_v13.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -90,7 +87,10 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - Phase-Aware Gameplay Mouse Passthrough v12
+          MVP2005 Modern - Focus-Aware Borderless Alt-Tab v13
+
+          v12 is the known-good rendering/input baseline. v13 keeps its menu and
+          gameplay mouse behavior unchanged and only changes focus/minimize handling.
 
           Replace the previous test mvp2005fix.exe and mvp2005fix.dll with this pair.
 
@@ -101,45 +101,34 @@ jobs:
              [Debug]
              Logging=1
 
-          For this test keep the dgVoodoo setting that produced non-exclusive
-          gameplay behavior:
-
              [DirectX]
              AppControlledScreenMode = false
 
-          Keep your other current dgVoodoo settings unchanged.
+          The previous runtime could see the normal minimized/off-screen HWND state
+          during Alt-Tab and immediately reassert 2560x1440 from the Present guard,
+          making MVP appear to pull itself back into focus.
 
-          v8 remains active in menus, where the physical 2560x1440 client must be
-          mapped into MVP's logical 800x600 front-end coordinate space.
+          v13 tracks WM_ACTIVATEAPP. While MVP is inactive or minimized, the
+          SetWindowLong/SetWindowPos/MoveWindow/SetWindowPlacement, WndProc geometry,
+          and Present-time borderless guards stand down. They resume when the game is
+          active again. No focus-stealing API is called by v13.
 
-          The clean AppControlledScreenMode=false trace showed that the previous
-          gameplay-phase detector fired too early during initial 640x480 startup.
-          v12 detects only the characteristic 4:3 same-height gameplay request
-          (1920x1440 on a 2560x1440 monitor) while MVP's logical backbuffer is
-          800x600.
-
-          At that exact transition v12:
-            - marks gameplay mode,
-            - resets bounded input/geometry/SetCursorPos diagnostics,
-            - stops v8 mouse-coordinate scaling,
-            - passes gameplay queued mouse messages to MVP unchanged.
+          Confirm first that menu and gameplay mouse input still behave exactly like
+          the known-good v12 build. Then test repeated Alt-Tab both directions before
+          and during gameplay.
 
           Useful log lines:
-             gameplay 4:3 transition detected; mouse scaling disabled and diagnostics reset
-             probe PeekMessageA raw msg=...
-             PeekMessageA gameplay passthrough msg=...
-             probe suppressed SetCursorPos ...
-             probe GetCursorPos raw=...
+             borderless WM_ACTIVATEAPP active=0
+             borderless WM_ACTIVATEAPP active=1
 
-          Test menus first to confirm they still work, then load fully into a game
-          and test mouse input around all four corners and center. Send the resulting
-          mvp2005fix.log if gameplay mouse input is still incorrect.
+          If Alt-Tab is still strange, send the new mvp2005fix.log and describe the
+          exact sequence (first Alt-Tab, return, second Alt-Tab).
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-gameplay-mouse-v12-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-alt-tab-v13-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-gameplay-mouse-v12-x86
+          name: mvp2005modern-borderless-alt-tab-v13-x86
           path: dist/
           if-no-files-found: error
