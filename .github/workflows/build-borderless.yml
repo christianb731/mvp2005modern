@@ -33,6 +33,7 @@ jobs:
         run: |
           cd upstream
           python3 ../patches/apply_borderless.py
+          python3 ../patches/apply_failsafe.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -48,7 +49,7 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - D3D8 Borderless Test
+          MVP2005 Modern - D3D8 Borderless Fail-Safe Test
 
           1. Back up the current mvp2005fix.exe and mvp2005fix.dll in the MVP Baseball 2005 folder.
           2. Copy this build's mvp2005fix.exe and mvp2005fix.dll beside mvp2005.exe.
@@ -61,22 +62,26 @@ jobs:
           5. Keep [Debug] Logging=1 for the first run.
           6. Launch through mvp2005fix.exe.
 
-          Expected log entries include:
-             config ... borderless=1
-             borderless CreateDevice ...
-             CreateDevice intercepted; patching device vtable
-             device vtable hooks installed
+          This build is fail-safe: if the borderless Direct3D8 CreateDevice call fails,
+          it logs the HRESULT and retries immediately with MVP's original fullscreen
+          parameters. The game should therefore still launch even when borderless fails.
 
-          If MVP changes presentation state after startup you may also see:
-             borderless Reset ...
+          Useful log entries:
+             original CreateDevice ...
+             borderless CreateDevice try ...
+             borderless CreateDevice succeeded
 
-          To recover, restore the backed-up upstream mvp2005fix pair and set Borderless Enabled=0.
+          or, on failure:
+             borderless CreateDevice failed hr=........; retrying original fullscreen parameters
+             fullscreen CreateDevice fallback hr=........
+
+          If MVP changes presentation state later, Reset has the same fallback behavior.
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-failsafe-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-x86
+          name: mvp2005modern-borderless-failsafe-x86
           path: dist/
           if-no-files-found: error
