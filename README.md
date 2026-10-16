@@ -72,15 +72,37 @@ It then builds the upstream x86 release and publishes the artifact:
 
 `mvp2005modern-compatibility-rc1-x86`
 
+## Launcher preview
+
+The next product layer is now under development. `patches/apply_modern_launcher_v1.py` turns the upstream launcher into the first integrated **MVP Baseball 2005 Modern** configuration UI.
+
+The launcher preview currently:
+
+- always opens its UI instead of silently auto-launching from an existing config;
+- remembers the selected `mvp2005.exe` path;
+- selects standard or custom resolutions and calculates the matching widescreen projection scale;
+- keeps the large-drive save fix configurable;
+- enables `[Borderless] Enabled=1` automatically;
+- updates only the dgVoodoo keys required by the verified borderless setup, preserving unrelated wrapper settings;
+- checks for the expected `dgVoodoo.conf`, `D3D8.dll`, and `DDraw.dll` before launch;
+- launches the game through the same verified runtime injection path as RC1.
+
+The launcher preview build publishes:
+
+`mvp2005modern-launcher-v0.1-x86`
+
+The artifact contains `MVP2005Modern.exe`, `mvp2005fix.dll`, the upstream/third-party license notices, and setup notes. It does not redistribute dgVoodoo2, SafeDiscShim, MVP Baseball 2005, or any EA/MLB content.
+
 ## Components
 
 - **SafeDiscShim** — compatibility for the original game's SafeDisc launch flow.
 - **dgVoodoo2** — modern Direct3D/DirectDraw wrapper.
 - **mvp2005fix** — upstream resolution, widescreen and large-drive compatibility work.
 - **MVP2005 Modern runtime patches** — true borderless presentation, phase-aware mouse handling, Alt-Tab behavior and MVP-specific integration.
+- **MVP2005 Modern launcher** — integrated path, resolution and compatibility configuration, with profiles/mod management planned on top.
 
 No MVP Baseball 2005 game files, copyrighted EA/MLB assets, no-CD executable, or DRM bypass are distributed by this repository.
 
 ## Next phase
 
-With the core compatibility behavior stabilized, development can move to the launcher and mod/profile layer: automatic setup, resolution configuration, profile switching, backups, and mod management while keeping the game installation recoverable.
+Once the launcher preview is verified against the RC1 runtime, the next work is profile and mod management: isolated profiles, backup/restore, file manifests, activation/deactivation and eventually presets such as Vanilla, modern rosters and Total Classics without making the base installation difficult to recover.
