@@ -17,7 +17,7 @@ def replace_once(old: str, new: str, label: str) -> None:
 # actual HWND stays monitor-sized, but gameplay mouse input is still wrong.
 # The initial 640x480 decorated-window setup can request 2566x1469, so the old
 # generic non-monitor-size detector is too broad. The real gameplay transition
-# is the later same-height 4:3 request: 1920x1440 on a 2560x1440 monitor.
+# is the later large 4:3 request (1920x1440 in the observed 2560x1440 setup).
 replace_once(
 '''static volatile LONG gameplay_window_transition_seen;\nstatic LONG present_guard_log_count;\n''',
 '''static volatile LONG gameplay_window_transition_seen;\nstatic volatile LONG gameplay_input_phase;\nstatic LONG present_guard_log_count;\n''',
@@ -26,7 +26,7 @@ replace_once(
 
 replace_once(
 '''    if (GetForegroundWindow() != borderless_window) return;\n    if (!GetClientRect(borderless_window, &rc)) return;\n''',
-'''    if (GetForegroundWindow() != borderless_window) return;\n\n    /* Front-end menus need physical client coordinates mapped into MVP's\n     * logical 800x600 UI. After the characteristic 4:3 gameplay transition,\n     * leave queued mouse coordinates untouched as a direct gameplay test. */\n    if (InterlockedCompareExchange(&gameplay_input_phase, 0, 0) != 0) {\n        if (InterlockedIncrement(&message_scale_log_count) <= 40) {\n            char buf[224];\n            wsprintfA(buf,\n                "%s gameplay passthrough msg=%04x lparam=%d,%d pt=%ld,%ld logical=%lux%lu\\n",\n                source, (unsigned int)msg->message,\n                (int)(SHORT)LOWORD(msg->lParam),\n                (int)(SHORT)HIWORD(msg->lParam),\n                msg->pt.x, msg->pt.y,\n                (unsigned long)borderless_logical_width,\n                (unsigned long)borderless_logical_height);\n            log_line(buf);\n        }\n        return;\n    }\n\n    if (!GetClientRect(borderless_window, &rc)) return;\n''',
+'''    if (GetForegroundWindow() != borderless_window) return;\n\n    /* Front-end menus need physical client coordinates mapped into MVP's\n     * logical 800x600 UI. After the characteristic large 4:3 gameplay request,\n     * leave queued mouse coordinates untouched as a direct gameplay test. */\n    if (InterlockedCompareExchange(&gameplay_input_phase, 0, 0) != 0) {\n        if (InterlockedIncrement(&message_scale_log_count) <= 40) {\n            char buf[224];\n            wsprintfA(buf,\n                "%s gameplay passthrough msg=%04x lparam=%d,%d pt=%ld,%ld logical=%lux%lu\\n",\n                source, (unsigned int)msg->message,\n                (int)(SHORT)LOWORD(msg->lParam),\n                (int)(SHORT)HIWORD(msg->lParam),\n                msg->pt.x, msg->pt.y,\n                (unsigned long)borderless_logical_width,\n                (unsigned long)borderless_logical_height);\n            log_line(buf);\n        }\n        return;\n    }\n\n    if (!GetClientRect(borderless_window, &rc)) return;\n''',
 "gameplay queued-message passthrough",
 )
 
@@ -47,8 +47,6 @@ transition_re = re.compile(
 
 matches = list(transition_re.finditer(text))
 if len(matches) != 1:
-    # Fallback: locate the unique detector by its state variable and replace the
-    # containing if-block. This is intentionally narrow to fake_SetWindowPos_guard.
     anchor = 'InterlockedCompareExchange(&gameplay_window_transition_seen, 1, 0) == 0) {'
     pos = text.find(anchor)
     if pos < 0 or text.find(anchor, pos + 1) >= 0:
@@ -66,8 +64,8 @@ if len(matches) != 1:
 else:
     start, end = matches[0].span()
 
-new_transition = '''            if (borderless_logical_width == 800 &&\n                borderless_logical_height == 600 &&\n                cx > 0 && cy > 0 &&\n                cy == monitor_height && cx < monitor_width &&\n                cx * 3 == cy * 4 &&\n                InterlockedCompareExchange(&gameplay_window_transition_seen, 1, 0) == 0) {\n                InterlockedExchange(&gameplay_input_phase, 1);\n                InterlockedExchange(&input_probe_log_count, 0);\n                InterlockedExchange(&geometry_probe_log_count, 0);\n                InterlockedExchange(&message_scale_log_count, 0);\n                InterlockedExchange(&setcursor_probe_log_count, 0);\n                log_line("gameplay 4:3 transition detected; mouse scaling disabled and diagnostics reset\\n");\n            }\n'''
+new_transition = '''            /* The raw requested size is the stable phase signal. Do not depend\n             * on MonitorFromWindow geometry because dgVoodoo can virtualize the\n             * host window while still forwarding MVP's 4:3 gameplay request. */\n            if (borderless_logical_width == 800 &&\n                borderless_logical_height == 600 &&\n                cx > (int)borderless_logical_width &&\n                cy > (int)borderless_logical_height &&\n                cx * 3 == cy * 4) {\n                LONG was_gameplay = InterlockedExchange(&gameplay_input_phase, 1);\n                if (!was_gameplay) {\n                    InterlockedExchange(&gameplay_window_transition_seen, 1);\n                    InterlockedExchange(&input_probe_log_count, 0);\n                    InterlockedExchange(&geometry_probe_log_count, 0);\n                    InterlockedExchange(&message_scale_log_count, 0);\n                    InterlockedExchange(&setcursor_probe_log_count, 0);\n                    log_line("gameplay 4:3 request detected; raw mouse passthrough enabled\\n");\n                }\n            }\n'''
 text = text[:start] + new_transition + text[end:]
 
 RUNTIME.write_text(text, encoding="utf-8")
-print("Applied MVP2005 Modern phase-aware gameplay mouse passthrough v12")
+print("Applied MVP2005 Modern robust phase-aware gameplay mouse passthrough v12")
