@@ -61,17 +61,20 @@ jobs:
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
 
-          # v12 is the known-good baseline: menu mouse scaling works and gameplay
-          # switches to raw queued Win32 mouse coordinates at the 4:3 transition.
-          # v13 changes only focus/minimize behavior so Alt-Tab can proceed without
-          # the Present/window guards immediately restoring the game HWND.
+          # Restore the known-good mouse path from the successful build:
+          # v8 scales front-end mouse messages, v12 adds gameplay phase state,
+          # and the robust v13 detector recognizes the raw large 4:3 gameplay
+          # request and enables raw queued mouse passthrough.
+          # v14 adds only focus/window diagnostics for Alt-Tab; it intentionally
+          # makes no focus/minimize behavior changes.
           python3 ../patches/apply_input_probe_v7.py
           python3 ../patches/apply_message_scale_v8.py
           python3 ../patches/apply_window_guard_v9.py
           python3 ../patches/apply_present_guard_v10.py
           python3 ../patches/apply_wndproc_geometry_guard_v11.py
           python3 ../patches/apply_gameplay_input_phase_v12.py
-          python3 ../patches/apply_alt_tab_focus_v13.py
+          python3 ../patches/apply_gameplay_input_phase_v13.py
+          python3 ../patches/apply_alt_tab_probe_v14.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -87,12 +90,16 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - Focus-Aware Borderless Alt-Tab v13
+          MVP2005 Modern - Known-Good Mouse + Alt-Tab Diagnostic v14
 
-          v12 is the known-good rendering/input baseline. v13 keeps its menu and
-          gameplay mouse behavior unchanged and only changes focus/minimize handling.
+          This build restores the known-good gameplay mouse detector from the build
+          that the user confirmed worked perfectly. The previous v13 workflow
+          accidentally omitted that detector and regressed gameplay mouse input.
 
-          Replace the previous test mvp2005fix.exe and mvp2005fix.dll with this pair.
+          v14 does NOT attempt another Alt-Tab behavior fix. It only logs the focus,
+          activation, visibility, minimize, geometry, and style transitions so the
+          remaining semi-exclusive -> borderless-after-first-Alt-Tab behavior can be
+          identified from evidence.
 
           Keep:
              [Borderless]
@@ -104,31 +111,23 @@ jobs:
              [DirectX]
              AppControlledScreenMode = false
 
-          The previous runtime could see the normal minimized/off-screen HWND state
-          during Alt-Tab and immediately reassert 2560x1440 from the Present guard,
-          making MVP appear to pull itself back into focus.
+          Test:
+            1. Confirm menu mouse works.
+            2. Enter gameplay and confirm gameplay mouse is back to the known-good state.
+            3. Alt-Tab out once, return, then Alt-Tab out a second time.
+            4. Exit and send mvp2005fix.log.
 
-          v13 tracks WM_ACTIVATEAPP. While MVP is inactive or minimized, the
-          SetWindowLong/SetWindowPos/MoveWindow/SetWindowPlacement, WndProc geometry,
-          and Present-time borderless guards stand down. They resume when the game is
-          active again. No focus-stealing API is called by v13.
+          Useful log lines begin with:
+             gameplay 4:3 request detected; raw mouse passthrough enabled
+             focus probe msg=
 
-          Confirm first that menu and gameplay mouse input still behave exactly like
-          the known-good v12 build. Then test repeated Alt-Tab both directions before
-          and during gameplay.
-
-          Useful log lines:
-             borderless WM_ACTIVATEAPP active=0
-             borderless WM_ACTIVATEAPP active=1
-
-          If Alt-Tab is still strange, send the new mvp2005fix.log and describe the
-          exact sequence (first Alt-Tab, return, second Alt-Tab).
+          No focus-stealing API is added by v14.
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-alt-tab-v13-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-alt-tab-probe-v14-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-alt-tab-v13-x86
+          name: mvp2005modern-borderless-alt-tab-probe-v14-x86
           path: dist/
           if-no-files-found: error
