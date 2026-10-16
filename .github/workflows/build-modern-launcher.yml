@@ -1,0 +1,92 @@
+name: Build MVP2005 Modern launcher
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'patches/apply_production_rc1.py'
+      - 'patches/apply_modern_launcher_v1.py'
+      - '.github/workflows/build-modern-launcher.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout MVP2005 Modern
+        uses: actions/checkout@v4
+
+      - name: Install 32-bit MinGW toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-i686 binutils-mingw-w64-i686 make git zip
+
+      - name: Clone pinned upstream mvp2005fix
+        run: |
+          git clone https://github.com/ostrich/mvp2005fix.git upstream
+          git -C upstream checkout 1c0dae9b030a8fb66648655c8d14043af1ead676
+
+      - name: Apply RC1 runtime and Modern launcher
+        run: |
+          cd upstream
+          python3 ../patches/apply_production_rc1.py
+          python3 ../patches/apply_modern_launcher_v1.py
+          git diff --check
+          git diff --stat
+
+      - name: Build upstream tests
+        run: make -C upstream test-build
+
+      - name: Build Windows x86 product
+        run: make -C upstream release
+
+      - name: Package launcher preview
+        run: |
+          mkdir -p dist
+          cp upstream/release/mvp2005fix.exe dist/MVP2005Modern.exe
+          cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
+          cp upstream/LICENSE dist/LICENSE
+          cat > dist/SETUP.txt <<'EOF'
+          MVP Baseball 2005 Modern - Launcher Preview v0.1
+
+          This preview combines the verified RC1 compatibility runtime with the
+          first integrated MVP2005 Modern launcher/configuration UI.
+
+          Recommended setup:
+            1. Put MVP2005Modern.exe and mvp2005fix.dll together. The MVP Baseball
+               2005 game folder is the simplest location.
+            2. Keep your working dgVoodoo2 files in the game folder, including:
+                 dgVoodoo.conf
+                 D3D8.dll
+                 DDraw.dll
+            3. SafeDiscShim remains a separate system-level prerequisite for an
+               original SafeDisc installation.
+            4. Run MVP2005Modern.exe.
+
+          The launcher:
+            - remembers the selected mvp2005.exe path;
+            - configures resolution and widescreen projection;
+            - enables the RC1 true-borderless runtime automatically;
+            - preserves unrelated dgVoodoo settings while enforcing the validated:
+                 [General] FullScreenMode=false
+                 [DirectX] AppControlledScreenMode=false
+                 [DirectX] DisableAltEnterToToggleScreenMode=true
+            - keeps the large-drive save fix configurable;
+            - always shows the launcher instead of silently auto-launching, so it
+              can become the future profile/mod-management UI.
+
+          This repository/artifact does not contain MVP Baseball 2005, EA/MLB
+          assets, dgVoodoo2 binaries, SafeDiscShim, or a no-CD executable.
+          EOF
+          (cd dist && zip -9 mvp2005modern-launcher-v0.1-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mvp2005modern-launcher-v0.1-x86
+          path: dist/
+          if-no-files-found: error
