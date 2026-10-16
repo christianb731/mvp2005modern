@@ -15,6 +15,7 @@ on:
       - 'patches/apply_controller_configurator_v7.py'
       - 'patches/apply_controller_configurator_v8.py'
       - 'patches/apply_controller_runtime_probe_v9.py'
+      - 'patches/apply_controller_runtime_probe_v10.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -52,6 +53,7 @@ jobs:
           python3 ../patches/apply_controller_configurator_v6.py
           python3 ../patches/apply_controller_configurator_v8.py
           python3 ../patches/apply_controller_runtime_probe_v9.py
+          python3 ../patches/apply_controller_runtime_probe_v10.py
           git diff --check
           git diff --stat
 
@@ -68,46 +70,40 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.9
+          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.10
 
-          Controller diagnostic build
-          ---------------------------
-          v0.8 produced a normal one-based MVP controller.cfg, but the in-game
-          behavior still did not change. v0.9 stops guessing about mappings and
-          observes the DirectInput controller state from inside MVP itself.
+          Controller diagnostic build v10
+          --------------------------------
+          v0.9 successfully proved that MVP creates multiple DirectInput 7 joystick
+          devices and applies an 80-byte / 44-object joystick data format, but the
+          log contained no GetDeviceState button transitions.
 
-          The RC1 runtime now hooks MVP's own DirectInputCreateA path and records
-          non-keyboard/non-mouse controller devices. For a normal DIJOYSTATE-format
-          gamepad it logs button state transitions using both the raw DirectInput
-          zero-based index and the corresponding one-based MVP controller.cfg value.
+          v0.10 extends the in-game probe rather than changing any mappings:
+            - tracks up to 32 controller device instances instead of 8;
+            - logs calls to GetDeviceState even when there is no button transition;
+            - hooks legacy IDirectInputDevice::GetDeviceData (vtable slot 10);
+            - decodes buffered DirectInput object events;
+            - labels button offsets as DI[index] / MVP[one-based button] when MVP
+              receives them.
 
           Test procedure:
-            1. Calibrate/save the controller normally if desired.
-            2. Launch MVP through MVP2005Modern.exe.
-            3. Once in a menu or game, press and release these buttons one at a time:
-                 X
-                 LB
-                 Menu / Start
-                 L3
-               Then optionally press A, B, Y, RB and R3 as well.
+            1. Launch MVP normally through MVP2005Modern.exe.
+            2. Enter a menu or gameplay screen where the controller works.
+            3. Press/release X, LB, Menu/Start, L3, then A, B, Y, RB and R3.
             4. Quit the game.
-            5. Upload mvp2005controller.log from the game folder.
+            5. Upload or paste mvp2005controller.log from the game directory.
 
-          No [Debug] Logging setting is required. mvp2005controller.log is a
-          separate diagnostic file and is recreated for each game run.
-
-          This build intentionally does not change the v0.8 mapping behavior yet;
-          the point is to capture exactly what MVP itself receives before making
-          another controller-config change.
+          The useful lines will start with GetDeviceState, GetDeviceData,
+          BUTTON EVENT or object event. This build does not alter controller.cfg.
 
           Compatibility setup remains unchanged from the verified RC1 launcher path.
           Intro-video skipping remains disabled for now.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.9-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.10-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.9-x86
+          name: mvp2005modern-launcher-v0.10-x86
           path: dist/
           if-no-files-found: error
