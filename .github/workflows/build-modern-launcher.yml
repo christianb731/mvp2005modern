@@ -10,6 +10,7 @@ on:
       - 'patches/apply_modern_launcher_v2.py'
       - 'patches/apply_modern_launcher_v3.py'
       - 'patches/apply_controller_configurator_v4.py'
+      - 'patches/apply_controller_configurator_v5.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -43,6 +44,7 @@ jobs:
           python3 ../patches/apply_modern_launcher_v2.py
           python3 ../patches/apply_modern_launcher_v3.py
           python3 ../patches/apply_controller_configurator_v4.py
+          python3 ../patches/apply_controller_configurator_v5.py
           git diff --check
           git diff --stat
 
@@ -59,15 +61,40 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.4
+          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.5
 
           Goal: one launcher that prepares a normal user-owned MVP Baseball 2005
           installation for modern Windows without requiring SafeDiscShim or
           dgVoodoo2 to already be installed.
 
-          Put MVP2005Modern.exe and mvp2005fix.dll together and run the launcher.
-          It can live in the game directory or elsewhere. Select mvp2005.exe if it
-          is not detected automatically.
+          Controller Setup v0.5
+          ---------------------
+          Controller configuration is now calibration-first instead of asking the
+          user to understand DirectInput button numbers.
+
+          1. Select the connected controller.
+          2. Choose the Xbox-style or generic stick/trigger representation.
+          3. Click "Calibrate by pressing buttons...".
+          4. Press the requested physical controls in order:
+               A, B, X, Y, LB, RB, View/Back, Menu/Start, L3, R3.
+          5. Click "Save to MVP".
+
+          The launcher polls the selected DirectInput device and learns its actual
+          button order. This is preferable to assuming that every modern Xbox,
+          Bluetooth, Steam Input or vendor driver exposes the same numeric order.
+
+          The learned DirectInput IDs remain visible as an Advanced reference, but
+          normal users do not need to type or understand the numbers.
+
+          The generated MVP mapping explains the important physical controls in
+          plain language: A is confirm/normal swing/pitch 1/throw home, B is
+          back/pitch 2/throw first, X is bunt/pitch 3/throw third, Y is pitch 4/
+          throw second, RB handles pitch 5/fielder switch, and Menu/Start is the
+          pause/menu control.
+
+          Saving creates/replaces only the selected controller profile while keeping
+          the rest of an existing Documents\MVP Baseball 2005\controller.cfg. The
+          original is backed up once as controller.cfg.mvp2005modern.bak.
 
           Compatibility setup
           -------------------
@@ -89,27 +116,7 @@ jobs:
               The included mvp2005fix.dll provides the verified resolution,
               widescreen, true-borderless, mouse-lifecycle and Alt-Tab fixes.
 
-          Controller Setup
-          ----------------
-          v0.4 adds an integrated Controller Setup window. It enumerates connected
-          DirectInput game controllers and derives the exact device/profile name
-          MVP expects in Documents\MVP Baseball 2005\controller.cfg.
-
-          It currently supports two generated layouts:
-            - Xbox / XInput-style: 10 buttons, combined trigger axis, 5 axes
-            - Generic DirectInput: 12 buttons, 4 axes
-
-          A/B/X/Y (Cross/Circle/Square/Triangle), bumpers, Back/Start and stick-click
-          button numbers are editable before saving. Stick axes, D-pad, triggers and
-          the gameplay action bindings are generated from the selected layout.
-
-          Saving creates/replaces only the selected controller profile while keeping
-          the rest of an existing controller.cfg. The original controller.cfg is
-          backed up once as controller.cfg.mvp2005modern.bak.
-
-          Intro-video skipping has been removed from the visible v0.4 UI for now.
-          It is low priority and will return only after we have a reliably tested
-          implementation.
+          Intro-video skipping remains disabled in the visible launcher for now.
 
           The Setup / Repair button explicitly re-checks SafeDiscShim and refreshes
           the pinned dgVoodoo files while retaining backups.
@@ -127,11 +134,11 @@ jobs:
           This artifact does not contain MVP Baseball 2005, EA/MLB assets,
           dgVoodoo2 binaries, SafeDiscShim binaries, or a no-CD executable.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.4-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.5-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.4-x86
+          name: mvp2005modern-launcher-v0.5-x86
           path: dist/
           if-no-files-found: error
