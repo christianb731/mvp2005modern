@@ -34,8 +34,6 @@ jobs:
           cd upstream
           python3 ../patches/apply_borderless.py
 
-          # apply_borderless.py emits some C helper blocks from a raw Python
-          # string. Teach the fail-safe patcher to accept that escaped form.
           python3 - <<'PY'
           from pathlib import Path
           p = Path('../patches/apply_failsafe.py')
@@ -49,7 +47,6 @@ jobs:
 
           python3 ../patches/apply_failsafe.py
 
-          # Windowed D3D8 presentation requires the default interval.
           python3 - <<'PY'
           from pathlib import Path
           p = Path('src/runtime.c')
@@ -64,11 +61,7 @@ jobs:
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
 
-          # Scale MVP's 640x480 menu mouse coordinates across the physical
-          # borderless client area. Reset updates the logical dimensions if the
-          # game later switches to the selected high-resolution backbuffer.
-          python3 ../patches/apply_mouse_scaling.py
-
+          python3 ../patches/apply_mouse_scaling_v2.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -84,7 +77,7 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - Borderless + Mouse Scaling Test
+          MVP2005 Modern - Borderless + Mouse Scaling v2
 
           Replace the previous test mvp2005fix.exe and mvp2005fix.dll with this pair.
 
@@ -97,27 +90,23 @@ jobs:
 
           Keep the known-good dgVoodoo.conf settings.
 
-          This build keeps the successful D3D8 borderless implementation and adds
-          coordinate scaling for MVP's legacy 640x480 menu mouse space.
+          This build scales only physical ScreenToClient input into MVP's logical
+          back-buffer coordinates. ClientToScreen is intentionally left untouched
+          so MVP can warp/recenter the Windows cursor without a scaling feedback loop.
 
           Expected startup log entries include:
-             ScreenToClient mouse scaling hook installed
-             ClientToScreen mouse scaling hook installed
+             ScreenToClient one-way mouse scaling hook installed
              original CreateDevice ...
              borderless CreateDevice try ... interval=0
              borderless CreateDevice succeeded
 
-          Moving the mouse in the menu should add a few diagnostic lines such as:
-             mouse ScreenToClient 1280,720 -> 320,240 client=2560x1440 logical=640x480
-
-          If gameplay resets the backbuffer to the selected full resolution, the
-          logical dimensions are updated automatically and scaling becomes 1:1.
+          There should be no ClientToScreen mouse scaling hook in this build.
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-mousefix-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-mousefix-v2-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-mousefix-x86
+          name: mvp2005modern-borderless-mousefix-v2-x86
           path: dist/
           if-no-files-found: error
