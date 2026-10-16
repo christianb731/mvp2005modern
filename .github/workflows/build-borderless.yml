@@ -61,7 +61,10 @@ jobs:
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
 
-          python3 ../patches/apply_mouse_scaling_v2.py
+          # v3: scale client-coordinate mouse messages at MVP's window-proc
+          # boundary and suppress legacy SetCursorPos warps while the borderless
+          # game window is foreground. Do not hook ScreenToClient/ClientToScreen.
+          python3 ../patches/apply_mouse_messages.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -77,7 +80,7 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - Borderless + Mouse Scaling v2
+          MVP2005 Modern - Borderless Mouse Fix v3
 
           Replace the previous test mvp2005fix.exe and mvp2005fix.dll with this pair.
 
@@ -90,23 +93,32 @@ jobs:
 
           Keep the known-good dgVoodoo.conf settings.
 
-          This build scales only physical ScreenToClient input into MVP's logical
-          back-buffer coordinates. ClientToScreen is intentionally left untouched
-          so MVP can warp/recenter the Windows cursor without a scaling feedback loop.
+          v3 no longer changes ScreenToClient or ClientToScreen.
 
-          Expected startup log entries include:
-             ScreenToClient one-way mouse scaling hook installed
-             original CreateDevice ...
-             borderless CreateDevice try ... interval=0
+          Instead it subclasses MVP's own game window and transforms only the
+          client-coordinate mouse messages that MVP receives (WM_MOUSEMOVE and
+          mouse button messages), mapping the physical borderless client area to
+          the current logical D3D8 backbuffer size.
+
+          It also suppresses MVP's legacy SetCursorPos calls while the borderless
+          game window is foreground. Those calls use the old 640x480 coordinate
+          space and can otherwise drag the real Windows cursor back into the
+          upper-left box.
+
+          Expected log entries:
+             SetCursorPos borderless warp suppression installed
              borderless CreateDevice succeeded
+             borderless mouse window-message scaling installed
+             mouse message 1280,720 -> 320,240 client=2560x1440 logical=640x480
 
-          There should be no ClientToScreen mouse scaling hook in this build.
+          If MVP tries to warp the cursor you may also see:
+             suppressed legacy SetCursorPos ... in borderless mode
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-mousefix-v2-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-mousefix-v3-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-mousefix-v2-x86
+          name: mvp2005modern-borderless-mousefix-v3-x86
           path: dist/
           if-no-files-found: error
