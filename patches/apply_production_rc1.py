@@ -38,7 +38,10 @@ def normalize_windowed_interval() -> None:
 
 
 def replace_regex_once(text: str, pattern: str, replacement: str, label: str) -> str:
-    updated, count = re.subn(pattern, replacement, text, count=1, flags=re.DOTALL)
+    # A callable replacement is intentional: re.sub otherwise interprets C
+    # backslash escapes (for example \\n in string literals) as replacement escapes.
+    updated, count = re.subn(pattern, lambda _match: replacement,
+        text, count=1, flags=re.DOTALL)
     if count != 1:
         raise SystemExit(f"RC1 cleanup {label}: expected one match, found {count}")
     return updated
@@ -104,6 +107,20 @@ def production_cleanup() -> None:
     # message dump while leaving the actual lParam/MSG.pt conversion unchanged.
     frontend_trace = r'''\n    if \(InterlockedIncrement\(&message_scale_log_count\) <= 40\) \{\n        char buf\[288\];\n        wsprintfA\(buf,\n            "%s scaled msg=%04x.*?\n        log_line\(buf\);\n    \}\n'''
     text = replace_regex_once(text, frontend_trace, "\n", "frontend per-message trace")
+
+    # The trace fields above are gone, so simplify the scaler signature and
+    # remove now-unused copies of MSG.pt.
+    text = text.replace(
+        "static void scale_queued_mouse_message(MSG *msg, const char *source)",
+        "static void scale_queued_mouse_message(MSG *msg)",
+        1,
+    )
+    text = text.replace('scale_queued_mouse_message(msg, "PeekMessageA");',
+        'scale_queued_mouse_message(msg);')
+    text = text.replace('scale_queued_mouse_message(msg, "GetMessageA");',
+        'scale_queued_mouse_message(msg);')
+    text = text.replace("    LONG old_pt_x;\n    LONG old_pt_y;\n", "", 1)
+    text = text.replace("    old_pt_x = msg->pt.x;\n    old_pt_y = msg->pt.y;\n", "", 1)
 
     # Persistent window guards remain important, but their request-by-request
     # diagnostics are no longer necessary.
