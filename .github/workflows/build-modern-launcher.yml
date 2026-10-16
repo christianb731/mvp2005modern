@@ -9,6 +9,7 @@ on:
       - 'patches/apply_modern_launcher_v1.py'
       - 'patches/apply_modern_launcher_v2.py'
       - 'patches/apply_modern_launcher_v3.py'
+      - 'patches/apply_controller_configurator_v4.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -41,6 +42,7 @@ jobs:
           python3 ../patches/apply_modern_launcher_v1.py
           python3 ../patches/apply_modern_launcher_v2.py
           python3 ../patches/apply_modern_launcher_v3.py
+          python3 ../patches/apply_controller_configurator_v4.py
           git diff --check
           git diff --stat
 
@@ -57,7 +59,7 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.3
+          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.4
 
           Goal: one launcher that prepares a normal user-owned MVP Baseball 2005
           installation for modern Windows without requiring SafeDiscShim or
@@ -67,6 +69,8 @@ jobs:
           It can live in the game directory or elsewhere. Select mvp2005.exe if it
           is not detected automatically.
 
+          Compatibility setup
+          -------------------
           On Launch, MVP2005 Modern verifies the complete compatibility stack:
 
           - SafeDiscShim v0.9.0
@@ -85,16 +89,27 @@ jobs:
               The included mvp2005fix.dll provides the verified resolution,
               widescreen, true-borderless, mouse-lifecycle and Alt-Tab fixes.
 
-          The launcher applies the known-good MVP dgVoodoo profile automatically,
-          including FullScreenMode=false and AppControlledScreenMode=false.
+          Controller Setup
+          ----------------
+          v0.4 adds an integrated Controller Setup window. It enumerates connected
+          DirectInput game controllers and derives the exact device/profile name
+          MVP expects in Documents\MVP Baseball 2005\controller.cfg.
 
-          Skip EA Sports / MVP intro videos
-              v0.3 no longer changes or blanks the VP6 files. The injected runtime
-              disables MVP's own internal ENABLE_FRONTEND_MOVIES setting before the
-              game starts. This avoids the crash seen with zero-byte VP6 files.
+          It currently supports two generated layouts:
+            - Xbox / XInput-style: 10 buttons, combined trigger axis, 5 axes
+            - Generic DirectInput: 12 buttons, 4 axes
 
-              If v0.2 previously created blank VP6 files, v0.3 restores the originals
-              from MVP2005Modern.Backup\intro automatically before launch.
+          A/B/X/Y (Cross/Circle/Square/Triangle), bumpers, Back/Start and stick-click
+          button numbers are editable before saving. Stick axes, D-pad, triggers and
+          the gameplay action bindings are generated from the selected layout.
+
+          Saving creates/replaces only the selected controller profile while keeping
+          the rest of an existing controller.cfg. The original controller.cfg is
+          backed up once as controller.cfg.mvp2005modern.bak.
+
+          Intro-video skipping has been removed from the visible v0.4 UI for now.
+          It is low priority and will return only after we have a reliably tested
+          implementation.
 
           The Setup / Repair button explicitly re-checks SafeDiscShim and refreshes
           the pinned dgVoodoo files while retaining backups.
@@ -112,11 +127,11 @@ jobs:
           This artifact does not contain MVP Baseball 2005, EA/MLB assets,
           dgVoodoo2 binaries, SafeDiscShim binaries, or a no-CD executable.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.3-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.4-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.3-x86
+          name: mvp2005modern-launcher-v0.4-x86
           path: dist/
           if-no-files-found: error
