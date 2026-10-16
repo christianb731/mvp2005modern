@@ -1,4 +1,4 @@
-name: Build borderless runtime
+name: Build MVP2005 Modern compatibility runtime
 
 on:
   push:
@@ -29,48 +29,12 @@ jobs:
           git clone https://github.com/ostrich/mvp2005fix.git upstream
           git -C upstream checkout 1c0dae9b030a8fb66648655c8d14043af1ead676
 
-      - name: Apply MVP2005 Modern runtime changes
+      - name: Apply consolidated MVP2005 Modern RC1 patch
         run: |
           cd upstream
-          python3 ../patches/apply_borderless.py
-
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('../patches/apply_failsafe.py')
-          s = p.read_text(encoding='utf-8')
-          old = '''    count = text.count(old)\n    if count != 1:\n        raise SystemExit(f"{label}: expected exactly one match, found {count}")\n    text = text.replace(old, new, 1)\n'''
-          new = '''    count = text.count(old)\n    if count == 1:\n        text = text.replace(old, new, 1)\n        return\n\n    alt_old = old.replace("\\\\n", "\\\\\\\\n")\n    alt_new = new.replace("\\\\n", "\\\\\\\\n")\n    alt_count = text.count(alt_old)\n    if alt_count == 1:\n        text = text.replace(alt_old, alt_new, 1)\n        return\n\n    raise SystemExit(f"{label}: expected exactly one match, found {count} (escaped form {alt_count})")\n'''
-          if old not in s:
-              raise SystemExit('could not update fail-safe replace_once helper')
-          p.write_text(s.replace(old, new, 1), encoding='utf-8')
-          PY
-
-          python3 ../patches/apply_failsafe.py
-
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('src/runtime.c')
-          s = p.read_text(encoding='utf-8')
-          needle = '    pp->FullScreen_RefreshRateInHz = 0;\n'
-          count = s.count(needle)
-          if count < 2:
-              raise SystemExit(f'expected at least 2 borderless refresh assignments, found {count}')
-          replacement = needle + '    pp->FullScreen_PresentationInterval = 0;\n'
-          s = s.replace(needle, replacement)
-          p.write_text(s, encoding='utf-8')
-          print(f'normalized D3D8 windowed presentation interval at {count} sites')
-          PY
-
-          python3 ../patches/apply_input_probe_v7.py
-          python3 ../patches/apply_message_scale_v8.py
-          python3 ../patches/apply_window_guard_v9.py
-          python3 ../patches/apply_present_guard_v10.py
-          python3 ../patches/apply_wndproc_geometry_guard_v11.py
-          python3 ../patches/apply_gameplay_input_phase_v12.py
-          python3 ../patches/apply_alt_tab_probe_v14.py
-          python3 ../patches/apply_true_borderless_v15.py
-          python3 ../patches/apply_frontend_return_alt_tab_v16.py
-          git diff -- src/runtime.c
+          python3 ../patches/apply_production_rc1.py
+          git diff --check
+          git diff --stat
 
       - name: Build upstream tests
         run: make -C upstream test-build
@@ -78,16 +42,24 @@ jobs:
       - name: Build Windows x86 release
         run: make -C upstream release
 
-      - name: Package test runtime
+      - name: Package RC1 runtime
         run: |
           mkdir -p dist
           cp upstream/release/mvp2005fix.exe dist/
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
-          cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - Frontend Return + Alt-Tab v16
+          cat > dist/RC1-README.txt <<'EOF'
+          MVP Baseball 2005 Modern - Compatibility Runtime RC1
 
-          Keep the now-working dgVoodoo true-borderless configuration:
+          This is the cleaned release-candidate build of the compatibility work
+          validated through the v16 test series.
+
+          Required mvp2005fix.ini setting:
+
+             [Borderless]
+             Enabled=1
+
+          Known-good dgVoodoo settings:
 
              [General]
              FullScreenMode = false
@@ -95,39 +67,34 @@ jobs:
              [DirectX]
              AppControlledScreenMode = false
 
-          v16 preserves the v15 behavior that worked in gameplay and adds:
+          Keep the rest of the previously working dgVoodoo configuration unchanged.
 
-          - automatic mouse phase recovery after leaving a match. While MVP is
-            actively submitting 3D gameplay projection matrices, queued mouse
-            messages are passed through raw. After gameplay 3D rendering has
-            stopped for 750 ms, the next mouse message restores the known-good
-            physical -> logical 800x600 frontend scaling. 3D activity can switch
-            raw gameplay input back on again automatically.
+          Validated behavior:
+          - true borderless presentation from launch
+          - widescreen/high-resolution rendering
+          - correct frontend/menu mouse mapping
+          - correct gameplay mouse mapping
+          - repeated menu -> gameplay -> menu transitions
+          - Alt-Tab without minimizing or pulling focus back
+          - large-drive save fix inherited from mvp2005fix
 
-          - true-borderless Alt-Tab handling. MVP's legacy ShowWindow minimize
-            requests and SC_MINIMIZE are suppressed for the tracked game window,
-            so Alt-Tab should transfer focus without minimizing/restoring MVP.
+          Production cleanup in RC1:
+          - one canonical build entry point: patches/apply_production_rc1.py
+          - development-era focus probe removed from the production build
+          - seven diagnostic-only USER32 hooks are no longer installed
+          - raw mouse/geometry trace spam removed
+          - failure/fallback and limited phase/drift logging retained when Debug.Logging=1
 
-          Test:
-            1. Start in the main menu and confirm mouse mapping is correct.
-            2. Enter a match and confirm gameplay mouse remains correct.
-            3. Quit the match back to the main menu, wait about one second, and
-               confirm the full-screen menu mouse mapping works again.
-            4. Alt-Tab out and back several times from gameplay and from the menu.
-            5. Send mvp2005fix.log if either issue remains.
+          Resolution and Aspect.ScaleX remain user-configurable through
+          mvp2005fix.ini exactly as before. For a 16:9 output, ScaleX is 0.75.
 
-          Useful v16 log lines:
-             gameplay monitor-sized MoveWindow detected; raw mouse passthrough enabled
-             frontend render phase detected; 800x600 mouse scaling restored
-             3D gameplay rendering resumed; raw mouse passthrough enabled
-             window guard suppressed ShowWindow minimize cmd=...
-             WndProc guard suppressed SC_MINIMIZE for borderless Alt-Tab
+          No MVP Baseball 2005 game files are included.
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-lifecycle-v16-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-compatibility-rc1-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE RC1-README.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-lifecycle-v16-x86
+          name: mvp2005modern-compatibility-rc1-x86
           path: dist/
           if-no-files-found: error
