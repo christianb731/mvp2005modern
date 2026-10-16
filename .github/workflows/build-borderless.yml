@@ -29,21 +29,19 @@ jobs:
           git clone https://github.com/ostrich/mvp2005fix.git upstream
           git -C upstream checkout 1c0dae9b030a8fb66648655c8d14043af1ead676
 
-      - name: Apply MVP2005 Modern borderless runtime changes
+      - name: Apply MVP2005 Modern runtime changes
         run: |
           cd upstream
           python3 ../patches/apply_borderless.py
 
-          # apply_borderless.py intentionally builds several C helper blocks from
-          # a raw Python string. Those blocks contain doubled backslashes in C
-          # log literals. Teach the fail-safe patcher's exact-match helper to
-          # retry with that representation when the normal form is not found.
+          # apply_borderless.py emits some C helper blocks from a raw Python
+          # string. Teach the fail-safe patcher to accept that escaped form.
           python3 - <<'PY'
           from pathlib import Path
           p = Path('../patches/apply_failsafe.py')
           s = p.read_text(encoding='utf-8')
           old = '''    count = text.count(old)\n    if count != 1:\n        raise SystemExit(f"{label}: expected exactly one match, found {count}")\n    text = text.replace(old, new, 1)\n'''
-          new = '''    count = text.count(old)\n    if count == 1:\n        text = text.replace(old, new, 1)\n        return\n\n    # The first borderless patch emits some helper blocks from a raw Python\n    # string, so C \\n sequences can contain one additional backslash.\n    alt_old = old.replace("\\\\n", "\\\\\\\\n")\n    alt_new = new.replace("\\\\n", "\\\\\\\\n")\n    alt_count = text.count(alt_old)\n    if alt_count == 1:\n        text = text.replace(alt_old, alt_new, 1)\n        return\n\n    raise SystemExit(f"{label}: expected exactly one match, found {count} (escaped form {alt_count})")\n'''
+          new = '''    count = text.count(old)\n    if count == 1:\n        text = text.replace(old, new, 1)\n        return\n\n    alt_old = old.replace("\\\\n", "\\\\\\\\n")\n    alt_new = new.replace("\\\\n", "\\\\\\\\n")\n    alt_count = text.count(alt_old)\n    if alt_count == 1:\n        text = text.replace(alt_old, alt_new, 1)\n        return\n\n    raise SystemExit(f"{label}: expected exactly one match, found {count} (escaped form {alt_count})")\n'''
           if old not in s:
               raise SystemExit('could not update fail-safe replace_once helper')
           p.write_text(s.replace(old, new, 1), encoding='utf-8')
@@ -51,9 +49,7 @@ jobs:
 
           python3 ../patches/apply_failsafe.py
 
-          # D3D8 requires a windowed swap chain to use the default presentation
-          # interval. MVP's fullscreen request uses interval=1; carrying that
-          # value into Windowed=TRUE produces D3DERR_INVALIDCALL (0x8876086C).
+          # Windowed D3D8 presentation requires the default interval.
           python3 - <<'PY'
           from pathlib import Path
           p = Path('src/runtime.c')
@@ -67,6 +63,11 @@ jobs:
           p.write_text(s, encoding='utf-8')
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
+
+          # Scale MVP's 640x480 menu mouse coordinates across the physical
+          # borderless client area. Reset updates the logical dimensions if the
+          # game later switches to the selected high-resolution backbuffer.
+          python3 ../patches/apply_mouse_scaling.py
 
           git diff -- src/runtime.c
 
@@ -83,39 +84,40 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - D3D8 Borderless Fail-Safe Test
+          MVP2005 Modern - Borderless + Mouse Scaling Test
 
-          1. Back up the current mvp2005fix.exe and mvp2005fix.dll in the MVP Baseball 2005 folder.
-          2. Copy this build's mvp2005fix.exe and mvp2005fix.dll beside mvp2005.exe.
-          3. Keep the proven working dgVoodoo.conf values. Do not enable dgVoodoo fake/windowed borderless modes.
-          4. In mvp2005fix.ini add:
+          Replace the previous test mvp2005fix.exe and mvp2005fix.dll with this pair.
 
+          Keep:
              [Borderless]
              Enabled=1
 
-          5. Keep [Debug] Logging=1 for the first run.
-          6. Launch through mvp2005fix.exe.
+             [Debug]
+             Logging=1
 
-          This build forces D3D8 windowed PresentationInterval to Default (0).
-          If borderless CreateDevice still fails, it logs the HRESULT and retries
-          immediately with MVP's original fullscreen parameters.
+          Keep the known-good dgVoodoo.conf settings.
 
-          Useful log entries:
-             original CreateDevice ... interval=1
+          This build keeps the successful D3D8 borderless implementation and adds
+          coordinate scaling for MVP's legacy 640x480 menu mouse space.
+
+          Expected startup log entries include:
+             ScreenToClient mouse scaling hook installed
+             ClientToScreen mouse scaling hook installed
+             original CreateDevice ...
              borderless CreateDevice try ... interval=0
              borderless CreateDevice succeeded
 
-          or, on failure:
-             borderless CreateDevice failed hr=........; retrying original fullscreen parameters
-             fullscreen CreateDevice fallback hr=........
+          Moving the mouse in the menu should add a few diagnostic lines such as:
+             mouse ScreenToClient 1280,720 -> 320,240 client=2560x1440 logical=640x480
 
-          If MVP changes presentation state later, Reset has the same fallback behavior.
+          If gameplay resets the backbuffer to the selected full resolution, the
+          logical dimensions are updated automatically and scaling becomes 1:1.
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-failsafe-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-mousefix-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-failsafe-x86
+          name: mvp2005modern-borderless-mousefix-x86
           path: dist/
           if-no-files-found: error
