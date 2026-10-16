@@ -2,35 +2,85 @@
 
 Compatibility, widescreen, and modding-layer work for a user-owned PC installation of **MVP Baseball 2005** on modern Windows.
 
-## Current development target
+## Compatibility status
 
-The current branch is focused on adding true borderless fullscreen at the Direct3D 8 device layer while preserving the already-working stack:
+The Windows 11 compatibility layer is now at **RC1**. The behavior validated during the v16 test series is frozen as the reference baseline:
 
-- SafeDiscShim for SafeDisc compatibility
-- dgVoodoo2 for legacy Direct3D/DirectDraw compatibility
-- `mvp2005fix` for resolution, widescreen projection correction, and large-drive save handling
+- MVP Baseball 2005 launches on modern Windows with the original SafeDisc flow handled by SafeDiscShim.
+- dgVoodoo2 provides the Direct3D 8 / DirectDraw compatibility layer.
+- the MVP-specific runtime patches high-resolution modes and widescreen projection;
+- the game runs true borderless instead of exclusive fullscreen;
+- frontend/menu mouse coordinates map correctly across the full display;
+- gameplay mouse coordinates use the game's native/raw mapping;
+- repeated menu -> gameplay -> menu transitions restore the correct input mode automatically;
+- Alt-Tab works normally without MVP minimizing itself or stealing focus back;
+- the upstream large-drive save fix remains enabled.
 
-The previous dgVoodoo-only borderless experiments were intentionally abandoned because they broke MVP's legacy 640x480 menu/scaling behavior. The current approach modifies the existing `mvp2005fix` Direct3D 8 hooks instead.
+The final known-good development build before cleanup is preserved by Git history at commit:
 
-## Borderless design
+`a7e2342b7464faa223c7d4e91b26f3d3b88db6f3`
 
-When `[Borderless] Enabled=1` is present in `mvp2005fix.ini`, the custom runtime:
+## Required dgVoodoo settings
 
-1. intercepts `IDirect3D8::CreateDevice`;
-2. switches the presentation parameters to windowed mode;
-3. uses the current desktop display format for the windowed backbuffer;
-4. clears the fullscreen refresh-rate field;
-5. converts the device window to a monitor-sized frameless popup;
-6. hooks `IDirect3DDevice8::Reset` and reapplies the same rules when MVP changes presentation state.
+The validated true-borderless configuration uses:
 
-The dgVoodoo configuration stays on the known-good fullscreen-compatible baseline instead of using dgVoodoo's fake/windowed fullscreen features.
+```ini
+[General]
+FullScreenMode = false
 
-## Build
+[DirectX]
+AppControlledScreenMode = false
+```
 
-GitHub Actions clones the known upstream `ostrich/mvp2005fix` revision, applies `patches/apply_borderless.py`, builds with the upstream MinGW Makefile, and uploads a Windows x86 artifact containing `mvp2005fix.exe` and `mvp2005fix.dll`.
+Keep the rest of the working dgVoodoo configuration unchanged. In particular, MVP2005 Modern does not require dgVoodoo's fake-fullscreen/window-border tricks; the runtime owns the MVP-specific borderless behavior.
 
-Pinned upstream revision:
+## Runtime configuration
+
+Enable the custom borderless path in `mvp2005fix.ini`:
+
+```ini
+[Borderless]
+Enabled=1
+```
+
+Resolution and widescreen scale remain configurable through the normal `mvp2005fix` settings. For a 16:9 output, the tested horizontal projection scale is `0.75`.
+
+Debug logging should normally be left off. It can be enabled when diagnosing a compatibility problem:
+
+```ini
+[Debug]
+Logging=1
+```
+
+## How the RC1 runtime works
+
+The compatibility runtime converts MVP's D3D8 device to windowed presentation using the desktop display format and presentation interval `0`, while preserving MVP's logical rendering sizes. It then keeps the tracked game HWND monitor-sized and frameless.
+
+MVP's frontend is logically 800x600 even when the physical client is much larger, so queued Win32 mouse coordinates are mapped from the physical client into the logical frontend coordinate space. Gameplay uses a different input interpretation, so the runtime switches to raw queued coordinates during 3D gameplay. Recent 3D projection activity is used as the phase signal; after gameplay rendering stops, the frontend mapping is restored automatically.
+
+For true borderless Alt-Tab, MVP's legacy minimize requests are suppressed for the tracked game window. Windows is therefore free to transfer focus to another application without the old minimize/restore/refocus cycle.
+
+## Production build
+
+`patches/apply_production_rc1.py` is the canonical RC1 build entry point. It assembles the proven development changes, removes experiment-only probes/log spam, verifies the critical compatibility hooks, and leaves the older v7-v16 patch scripts in the repository as development history and rollback material.
+
+GitHub Actions clones and pins upstream `ostrich/mvp2005fix` at:
 
 `1c0dae9b030a8fb66648655c8d14043af1ead676`
 
-No MVP Baseball 2005 game files are included or distributed by this repository.
+It then builds the upstream x86 release and publishes the artifact:
+
+`mvp2005modern-compatibility-rc1-x86`
+
+## Components
+
+- **SafeDiscShim** — compatibility for the original game's SafeDisc launch flow.
+- **dgVoodoo2** — modern Direct3D/DirectDraw wrapper.
+- **mvp2005fix** — upstream resolution, widescreen and large-drive compatibility work.
+- **MVP2005 Modern runtime patches** — true borderless presentation, phase-aware mouse handling, Alt-Tab behavior and MVP-specific integration.
+
+No MVP Baseball 2005 game files, copyrighted EA/MLB assets, no-CD executable, or DRM bypass are distributed by this repository.
+
+## Next phase
+
+With the core compatibility behavior stabilized, development can move to the launcher and mod/profile layer: automatic setup, resolution configuration, profile switching, backups, and mod management while keeping the game installation recoverable.
