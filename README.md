@@ -32,7 +32,7 @@ FullScreenMode = false
 AppControlledScreenMode = false
 ```
 
-Keep the rest of the working dgVoodoo configuration unchanged. In particular, MVP2005 Modern does not require dgVoodoo's fake-fullscreen/window-border tricks; the runtime owns the MVP-specific borderless behavior.
+The launcher now owns the tested MVP-specific dgVoodoo profile, including the settings above, so users do not need to configure them manually.
 
 ## Runtime configuration
 
@@ -43,7 +43,7 @@ Enable the custom borderless path in `mvp2005fix.ini`:
 Enabled=1
 ```
 
-Resolution and widescreen scale remain configurable through the normal `mvp2005fix` settings. For a 16:9 output, the tested horizontal projection scale is `0.75`.
+The MVP2005 Modern launcher writes this automatically. Resolution and widescreen scale remain configurable through the launcher. For a 16:9 output, the tested horizontal projection scale is `0.75`.
 
 Debug logging should normally be left off. It can be enabled when diagnosing a compatibility problem:
 
@@ -72,37 +72,45 @@ It then builds the upstream x86 release and publishes the artifact:
 
 `mvp2005modern-compatibility-rc1-x86`
 
-## Launcher preview
+## All-in-one launcher preview
 
-The next product layer is now under development. `patches/apply_modern_launcher_v1.py` turns the upstream launcher into the first integrated **MVP Baseball 2005 Modern** configuration UI.
+`patches/apply_modern_launcher_v1.py` provides the base MVP2005 Modern configuration UI and `patches/apply_modern_launcher_v2.py` adds the automatic compatibility setup layer. The goal is one launcher that can take a normal user-owned MVP Baseball 2005 installation and prepare the modern compatibility stack for it.
 
-The launcher preview currently:
+The v0.2 launcher:
 
 - always opens its UI instead of silently auto-launching from an existing config;
-- remembers the selected `mvp2005.exe` path;
+- remembers and auto-detects the selected `mvp2005.exe` path, including the retail install registry location and common Program Files paths;
 - selects standard or custom resolutions and calculates the matching widescreen projection scale;
 - keeps the large-drive save fix configurable;
-- enables `[Borderless] Enabled=1` automatically;
-- updates only the dgVoodoo keys required by the verified borderless setup, preserving unrelated wrapper settings;
-- checks for the expected `dgVoodoo.conf`, `D3D8.dll`, and `DDraw.dll` before launch;
+- enables the verified RC1 borderless runtime automatically;
+- detects SafeDiscShim and, when missing, downloads the official pinned v0.9.0 installer, verifies its SHA-256, requests the required Windows elevation, installs it, and makes the current launcher process use `RedirectDrvMgt` before starting the game;
+- detects the local dgVoodoo2 wrapper and, when missing or repaired explicitly, downloads the official pinned v2.87.5 release, verifies its SHA-256, installs the x86 D3D8/DirectDraw components beside the game, and applies the known-good MVP profile;
+- makes one-time backups of existing compatibility files under `MVP2005Modern.Backup` before replacing them during repair;
+- provides a **Setup / Repair** button to explicitly re-check SafeDiscShim and refresh the pinned dgVoodoo files;
+- provides a reversible **Skip EA Sports / MVP intro videos** switch. The original `easports.vp6` and `mvpintro.vp6` files are backed up before blank replacements are created, and disabling the option restores the backups;
 - launches the game through the same verified runtime injection path as RC1.
 
-The launcher preview build publishes:
+External compatibility packages are downloaded directly from their official GitHub releases instead of being redistributed in the MVP2005 Modern artifact. The pinned downloads are:
 
-`mvp2005modern-launcher-v0.1-x86`
+- SafeDiscShim v0.9.0 installer — SHA-256 `b4c355ec63047a09c20c286c083fcad1031d47a2c17eac0de12b96d377ec369f`
+- dgVoodoo2 v2.87.5 release ZIP — SHA-256 `5ffde6927f7355ca3fdd5d785b581256a8e6539fa13e395a891ade6ba1040850`
 
-The artifact contains `MVP2005Modern.exe`, `mvp2005fix.dll`, the upstream/third-party license notices, and setup notes. It does not redistribute dgVoodoo2, SafeDiscShim, MVP Baseball 2005, or any EA/MLB content.
+The current launcher preview build publishes:
+
+`mvp2005modern-launcher-v0.2-x86`
+
+The artifact contains `MVP2005Modern.exe`, `mvp2005fix.dll`, the upstream/third-party license notices, and setup notes. It does not contain MVP Baseball 2005, EA/MLB assets, dgVoodoo2 binaries, SafeDiscShim binaries, or a no-CD executable. First-time automatic setup therefore requires internet access.
 
 ## Components
 
-- **SafeDiscShim** — compatibility for the original game's SafeDisc launch flow.
-- **dgVoodoo2** — modern Direct3D/DirectDraw wrapper.
+- **SafeDiscShim** — compatibility for the original game's SafeDisc launch flow. The launcher can install the official release automatically; it does not bypass the original media verification.
+- **dgVoodoo2** — modern Direct3D/DirectDraw wrapper, installed/configured automatically by the launcher when needed.
 - **mvp2005fix** — upstream resolution, widescreen and large-drive compatibility work.
 - **MVP2005 Modern runtime patches** — true borderless presentation, phase-aware mouse handling, Alt-Tab behavior and MVP-specific integration.
-- **MVP2005 Modern launcher** — integrated path, resolution and compatibility configuration, with profiles/mod management planned on top.
+- **MVP2005 Modern launcher** — integrated setup, path, resolution and compatibility configuration, with profiles/mod management planned on top.
 
 No MVP Baseball 2005 game files, copyrighted EA/MLB assets, no-CD executable, or DRM bypass are distributed by this repository.
 
 ## Next phase
 
-Once the launcher preview is verified against the RC1 runtime, the next work is profile and mod management: isolated profiles, backup/restore, file manifests, activation/deactivation and eventually presets such as Vanilla, modern rosters and Total Classics without making the base installation difficult to recover.
+After the all-in-one launcher setup path is verified on a clean/missing-dependency installation, the next work is profile and mod management: isolated profiles, backup/restore, file manifests, activation/deactivation and eventually presets such as Vanilla, modern rosters and Total Classics without making the base installation difficult to recover.
