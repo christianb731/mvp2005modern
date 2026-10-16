@@ -14,6 +14,7 @@ on:
       - 'patches/apply_controller_configurator_v6.py'
       - 'patches/apply_controller_configurator_v7.py'
       - 'patches/apply_controller_configurator_v8.py'
+      - 'patches/apply_controller_runtime_probe_v9.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -50,6 +51,7 @@ jobs:
           python3 ../patches/apply_controller_configurator_v5.py
           python3 ../patches/apply_controller_configurator_v6.py
           python3 ../patches/apply_controller_configurator_v8.py
+          python3 ../patches/apply_controller_runtime_probe_v9.py
           git diff --check
           git diff --stat
 
@@ -66,44 +68,46 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.8
+          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.9
 
-          Controller Setup v0.8
-          ---------------------
-          The v0.7 zero-based controller.cfg experiment has been removed.
+          Controller diagnostic build
+          ---------------------------
+          v0.8 produced a normal one-based MVP controller.cfg, but the in-game
+          behavior still did not change. v0.9 stops guessing about mappings and
+          observes the DirectInput controller state from inside MVP itself.
 
-          The uploaded v0.7 config proved that the launcher was writing button 0
-          through button 9, while long-standing known-good MVP controller.cfg
-          profiles use the game's one-based button 1 through button 10 convention.
+          The RC1 runtime now hooks MVP's own DirectInputCreateA path and records
+          non-keyboard/non-mouse controller devices. For a normal DIJOYSTATE-format
+          gamepad it logs button state transitions using both the raw DirectInput
+          zero-based index and the corresponding one-based MVP controller.cfg value.
 
-          More importantly, v0.5-v0.7 calibrated controllers through DirectInput8,
-          while MVP Baseball 2005 itself imports DirectInputCreateA and uses the
-          legacy DirectInput 7-era path. Modern drivers/middleware can expose a
-          different compatibility mapping through those paths.
+          Test procedure:
+            1. Calibrate/save the controller normally if desired.
+            2. Launch MVP through MVP2005Modern.exe.
+            3. Once in a menu or game, press and release these buttons one at a time:
+                 X
+                 LB
+                 Menu / Start
+                 L3
+               Then optionally press A, B, Y, RB and R3 as well.
+            4. Quit the game.
+            5. Upload mvp2005controller.log from the game folder.
 
-          v0.8 therefore calibrates through DirectInputCreateA with DirectInput 7
-          and the classic DIJOYSTATE format, matching MVP's input API family as
-          closely as possible. It then writes normal MVP one-based controller.cfg
-          button values.
+          No [Debug] Logging setting is required. mvp2005controller.log is a
+          separate diagnostic file and is recreated for each game run.
 
-          Recommended flow:
-            1. Open Controller Setup.
-            2. Select the Flydigi/controller and Xbox-style layout.
-            3. Calibrate / relearn all buttons again.
-            4. Save to MVP.
-            5. Test X, LB, Menu/Start and L3 first.
-
-          The wider plain-language controller UI and corrected v0.6 baseball-action
-          layout remain unchanged.
+          This build intentionally does not change the v0.8 mapping behavior yet;
+          the point is to capture exactly what MVP itself receives before making
+          another controller-config change.
 
           Compatibility setup remains unchanged from the verified RC1 launcher path.
           Intro-video skipping remains disabled for now.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.8-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.9-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.8-x86
+          name: mvp2005modern-launcher-v0.9-x86
           path: dist/
           if-no-files-found: error
