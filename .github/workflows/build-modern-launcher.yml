@@ -17,6 +17,7 @@ on:
       - 'patches/apply_controller_runtime_remap_v13.py'
       - 'patches/apply_controller_usability_v14.py'
       - 'patches/apply_controller_canonical_xbox_v15.py'
+      - 'patches/apply_controller_xinput_bridge_v16.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -57,6 +58,7 @@ jobs:
           python3 ../patches/apply_controller_runtime_remap_v13.py
           python3 ../patches/apply_controller_usability_v14.py
           python3 ../patches/apply_controller_canonical_xbox_v15.py
+          python3 ../patches/apply_controller_xinput_bridge_v16.py
           git diff --check
           git diff --stat
 
@@ -73,60 +75,49 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.15
+          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.16
 
-          Canonical Xbox controller state
-          -------------------------------
-          The user's v0.14 files confirmed that button calibration itself is
-          correct: A/B/X/Y/LB/RB/View/Start/L3/R3 are physical DI indices 0-9.
-          They also confirmed the Flydigi exposes LT as axis+3 and RT as axis-3.
+          Native XInput bridge
+          --------------------
+          The controller has been in XInput mode throughout. Previous builds still
+          read its legacy DirectInput compatibility view and tried to normalize that
+          view. v0.16 removes that extra layer from the primary path.
 
-          The remaining instability came from mixing those modern physical axis
-          semantics with MVP's 2005-era Xbox profile. v0.15 now treats calibration
-          as hardware input only and presents MVP with one canonical logical pad:
+          When an XInput controller is connected, the injected runtime now reads
+          XInputGetState directly and synthesizes the exact 80-byte classic
+          DIJOYSTATE layout expected by MVP's established Xbox controller profile:
 
-            A/B/X/Y       = logical buttons 1/2/3/4
-            LB/RB         = logical buttons 5/6
-            View/Start    = logical buttons 7/8
-            L3/R3         = logical buttons 9/10
-            LT            = canonical axis-3
-            RT            = canonical axis+3
+            logical buttons 1..10 = A, B, X, Y, LB, RB, Back, Start, L3, R3
+            left stick             = axes 1/2
+            LT/RT                  = combined canonical axis 3
+            right stick            = axes 4/5
+            D-pad                  = POV hat
 
-          The injected runtime normalizes BOTH buttons and trigger axis state before
-          MVP reads it. On the tested Flydigi, the raw trigger axis is inverted at
-          runtime so the game always sees the same trigger orientation as the
-          long-established Xbox 360 controller.cfg profile.
+          MVP itself still believes it is reading DirectInput, so no game-side
+          changes are required. The controller's vendor-specific DirectInput button
+          numbering and trigger orientation are bypassed entirely.
 
-          The generated baseball actions now follow that established profile:
-            A/B/X/Y = home/first/third/second throws and pitches 1-4
-            RB      = pitch 5 / retreat all / fake rundown
-            LB      = fielder switch / advance all
-            RT      = relay/cutoff throw
-            L3      = pitch history
-            R3      = bunt
-
-          Faster tuning workflow:
-            - Physical controller calibration should no longer require a new build.
-            - Baseball action assignments live in controller.cfg and can be changed
-              either in MVP's own My MVP > My MVP Options > Controller Config menu
-              or through the launcher's Open controller.cfg button.
-            - Future action-map tweaks should not require recompiling the launcher.
+          If no XInput controller is connected, v0.15's calibrated DirectInput
+          normalizer remains available as a fallback.
 
           Test procedure:
-            1. Open Controller Setup and click Save to MVP once. Recalibration is
-               not required because the uploaded v0.14 hardware values are valid.
-            2. Launch a game.
-            3. First verify B throws to first, X throws to third, and Start pauses.
-            4. Then test LB/RB/L3/R3 and LT/RT in their relevant game contexts.
+            1. Keep [Controller] RemapEnabled=1 in mvp2005fix.ini.
+            2. Do NOT recalibrate and do NOT change controller.cfg.
+            3. Launch MVP.
+            4. Test B -> throw first, X -> throw third, Start -> pause first.
+            5. Then test LB/RB/L3/R3 and LT/RT.
+
+          With Debug Logging=1, mvp2005fix.log should contain:
+            controller source: native XInput -> canonical MVP DIJOYSTATE
 
           Compatibility setup remains unchanged from the verified RC1 launcher path.
           Intro-video skipping remains disabled for now.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.15-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.16-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.15-x86
+          name: mvp2005modern-launcher-v0.16-x86
           path: dist/
           if-no-files-found: error
