@@ -11,6 +11,7 @@ on:
       - 'patches/apply_modern_launcher_v3.py'
       - 'patches/apply_controller_configurator_v4.py'
       - 'patches/apply_controller_configurator_v5.py'
+      - 'patches/apply_controller_configurator_v6.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -45,6 +46,7 @@ jobs:
           python3 ../patches/apply_modern_launcher_v3.py
           python3 ../patches/apply_controller_configurator_v4.py
           python3 ../patches/apply_controller_configurator_v5.py
+          python3 ../patches/apply_controller_configurator_v6.py
           git diff --check
           git diff --stat
 
@@ -61,40 +63,46 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.5
+          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.6
 
-          Goal: one launcher that prepares a normal user-owned MVP Baseball 2005
-          installation for modern Windows without requiring SafeDiscShim or
-          dgVoodoo2 to already be installed.
-
-          Controller Setup v0.5
+          Controller Setup v0.6
           ---------------------
-          Controller configuration is now calibration-first instead of asking the
-          user to understand DirectInput button numbers.
+          v0.6 keeps the press-to-learn calibration from v0.5 but fixes both the
+          generated MVP gameplay-action layout and the controller setup UI.
 
-          1. Select the connected controller.
-          2. Choose the Xbox-style or generic stick/trigger representation.
-          3. Click "Calibrate by pressing buttons...".
-          4. Press the requested physical controls in order:
-               A, B, X, Y, LB, RB, View/Back, Menu/Start, L3, R3.
-          5. Click "Save to MVP".
+          Recommended flow:
+            1. Select the connected controller.
+            2. Choose Xbox-style or generic DirectInput layout.
+            3. Click "Calibrate / relearn all buttons...".
+            4. Press A, B, X, Y, LB, RB, View/Back, Menu/Start, L3 and R3.
+            5. Review the plain-language MVP actions shown beside each control.
+            6. Click "Save to MVP".
 
-          The launcher polls the selected DirectInput device and learns its actual
-          button order. This is preferable to assuming that every modern Xbox,
-          Bluetooth, Steam Input or vendor driver exposes the same numeric order.
+          The learned numeric DirectInput ID is now secondary information. Each row
+          identifies the physical control and the baseball actions the generated
+          controller.cfg will assign to it.
 
-          The learned DirectInput IDs remain visible as an Advanced reference, but
-          normal users do not need to type or understand the numbers.
+          Corrected Xbox-style MVP assignments include:
+            A       confirm / normal swing / pitch 1 / throw home
+            B       back / pitch 2 / throw first
+            X       pitch 3 / throw third
+            Y       pitch 4 / throw second / charge mound
+            LB      fielder switch / advance all runners
+            RB      pitch 5 / retreat all runners
+            View    select / fake rundown throw
+            Menu    pause / menu
+            L3      pitch history / intentional hit batter
+            R3      bunt / intentional walk
 
-          The generated MVP mapping explains the important physical controls in
-          plain language: A is confirm/normal swing/pitch 1/throw home, B is
-          back/pitch 2/throw first, X is bunt/pitch 3/throw third, Y is pitch 4/
-          throw second, RB handles pitch 5/fielder switch, and Menu/Start is the
-          pause/menu control.
+          Right trigger is used for relay/cutoff throws on the Xbox-style layout.
 
-          Saving creates/replaces only the selected controller profile while keeping
-          the rest of an existing Documents\MVP Baseball 2005\controller.cfg. The
-          original is backed up once as controller.cfg.mvp2005modern.bak.
+          v0.6 also reuses MVP's existing non-keyboard Player 1 profile name when
+          possible and deactivates other gamepad profiles that were also marked as
+          Player 1. This prevents an old auto-generated mapping from continuing to
+          win even after the launcher writes a corrected profile.
+
+          The original controller.cfg is still backed up once as
+          controller.cfg.mvp2005modern.bak.
 
           Compatibility setup
           -------------------
@@ -118,27 +126,18 @@ jobs:
 
           Intro-video skipping remains disabled in the visible launcher for now.
 
-          The Setup / Repair button explicitly re-checks SafeDiscShim and refreshes
-          the pinned dgVoodoo files while retaining backups.
-
           A genuinely clean Windows 10/11 machine is an intended supported setup.
           First-time automatic setup requires internet access and one UAC approval
           for SafeDiscShim. That clean-machine path still needs real-world testing.
 
-          Pinned external downloads:
-            SafeDiscShim v0.9.0 installer
-              SHA-256 b4c355ec63047a09c20c286c083fcad1031d47a2c17eac0de12b96d377ec369f
-            dgVoodoo2 v2.87.5 release ZIP
-              SHA-256 5ffde6927f7355ca3fdd5d785b581256a8e6539fa13e395a891ade6ba1040850
-
           This artifact does not contain MVP Baseball 2005, EA/MLB assets,
           dgVoodoo2 binaries, SafeDiscShim binaries, or a no-CD executable.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.5-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.6-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.5-x86
+          name: mvp2005modern-launcher-v0.6-x86
           path: dist/
           if-no-files-found: error
