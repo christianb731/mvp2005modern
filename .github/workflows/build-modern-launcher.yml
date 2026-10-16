@@ -16,6 +16,7 @@ on:
       - 'patches/apply_controller_configurator_v8.py'
       - 'patches/apply_controller_runtime_probe_v9.py'
       - 'patches/apply_controller_runtime_probe_v10.py'
+      - 'patches/apply_controller_runtime_probe_v11.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -54,6 +55,7 @@ jobs:
           python3 ../patches/apply_controller_configurator_v8.py
           python3 ../patches/apply_controller_runtime_probe_v9.py
           python3 ../patches/apply_controller_runtime_probe_v10.py
+          python3 ../patches/apply_controller_runtime_probe_v11.py
           git diff --check
           git diff --stat
 
@@ -70,40 +72,44 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.10
+          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.11
 
-          Controller diagnostic build v10
+          Controller diagnostic build v11
           --------------------------------
-          v0.9 successfully proved that MVP creates multiple DirectInput 7 joystick
-          devices and applies an 80-byte / 44-object joystick data format, but the
-          log contained no GetDeviceState button transitions.
+          v0.10 proved that the controller's physical DirectInput button stream is
+          exactly the normal one-based MVP mapping:
+            X -> MVP button 3
+            LB -> MVP button 5
+            Menu/Start -> MVP button 8
+            L3 -> MVP button 9
+            A/B/Y/RB/R3 -> buttons 1/2/4/6/10
 
-          v0.10 extends the in-game probe rather than changing any mappings:
-            - tracks up to 32 controller device instances instead of 8;
-            - logs calls to GetDeviceState even when there is no button transition;
-            - hooks legacy IDirectInputDevice::GetDeviceData (vtable slot 10);
-            - decodes buffered DirectInput object events;
-            - labels button offsets as DI[index] / MVP[one-based button] when MVP
-              receives them.
+          That matches controller.cfg and the long-standing working Xbox 360 MVP
+          profile, so button numbering is no longer the suspected problem.
+
+          MVP creates many DirectInput joystick devices. v0.11 identifies the
+          exact instance/product name of every device MVP creates and includes that
+          identity on the device that actually produces button transitions. This
+          tests whether controller.cfg is being written for a different device name
+          than the one MVP is actively polling.
 
           Test procedure:
             1. Launch MVP normally through MVP2005Modern.exe.
-            2. Enter a menu or gameplay screen where the controller works.
-            3. Press/release X, LB, Menu/Start, L3, then A, B, Y, RB and R3.
-            4. Quit the game.
-            5. Upload or paste mvp2005controller.log from the game directory.
+            2. Press X once (a few other buttons are fine too).
+            3. Quit the game.
+            4. Paste/upload mvp2005controller.log.
 
-          The useful lines will start with GetDeviceState, GetDeviceData,
-          BUTTON EVENT or object event. This build does not alter controller.cfg.
+          Look for "controller identity" lines and the "buttons self=... instance="
+          line. No controller.cfg changes are made by this diagnostic.
 
           Compatibility setup remains unchanged from the verified RC1 launcher path.
           Intro-video skipping remains disabled for now.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.10-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.11-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.10-x86
+          name: mvp2005modern-launcher-v0.11-x86
           path: dist/
           if-no-files-found: error
