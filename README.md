@@ -76,9 +76,14 @@ It then builds the upstream x86 release and publishes the artifact:
 
 The product goal is **one launcher that can start from a normal user-owned MVP Baseball 2005 installation on a machine that does not already have SafeDiscShim or dgVoodoo2 configured**.
 
-`patches/apply_modern_launcher_v1.py` provides the base MVP2005 Modern configuration UI, `apply_modern_launcher_v2.py` adds automatic dependency setup, and `apply_modern_launcher_v3.py` migrates the intro-skip implementation to the safer runtime method.
+The launcher layers are currently:
 
-The v0.3 launcher:
+- `apply_modern_launcher_v1.py` — core MVP2005 Modern configuration UI;
+- `apply_modern_launcher_v2.py` — automatic SafeDiscShim/dgVoodoo setup and repair;
+- `apply_modern_launcher_v3.py` / `apply_skip_intro_runtime_v3.py` — experimental intro-skip work retained for development history, but disabled in the visible v0.4 UI;
+- `apply_controller_configurator_v4.py` — integrated DirectInput/controller.cfg configurator.
+
+The v0.4 launcher:
 
 - always opens its UI instead of silently auto-launching from an existing config;
 - remembers and auto-detects the selected `mvp2005.exe` path, including the retail install registry location and common Program Files paths;
@@ -89,11 +94,31 @@ The v0.3 launcher:
 - detects the local dgVoodoo2 wrapper and, when missing or repaired explicitly, downloads the official pinned v2.87.5 release, verifies its SHA-256, installs the x86 D3D8/DirectDraw components beside the game, and applies the known-good MVP profile;
 - makes one-time backups of existing compatibility files under `MVP2005Modern.Backup` before replacing them during repair;
 - provides a **Setup / Repair** button to explicitly re-check SafeDiscShim and refresh the pinned dgVoodoo files;
-- provides **Skip EA Sports / MVP intro videos** without replacing the VP6 files. The runtime patches MVP's internal `ENABLE_FRONTEND_MOVIES` default before the game resumes. This replaces the v0.2 zero-byte VP6 method, which caused a launch crash on the verified modern setup;
-- automatically restores any intro movies that v0.2 backed up under `MVP2005Modern.Backup\intro`, so upgrading from the broken file-based test is self-repairing;
+- provides **Controller Setup...**, which enumerates attached DirectInput game controllers and generates the matching MVP `controller.cfg` profile;
 - launches the game through the same verified runtime injection path as RC1.
 
-The frontend-movie runtime patch was derived from the retail executable's own video-settings constructor. The launcher setting changes only the internal frontend-movies boolean while leaving the neighboring visual settings enabled.
+### Controller configurator
+
+MVP Baseball 2005 stores controller profiles in `Documents\MVP Baseball 2005\controller.cfg`. Modern controllers are often detected but receive poor default mappings, so v0.4 integrates the controller-profile generation directly into the launcher.
+
+The current controller configurator:
+
+- enumerates attached DirectInput game controllers;
+- derives MVP's underscore-formatted `profile=` / `device=` name from the actual DirectInput product name;
+- shows the controller's reported button, axis and POV counts;
+- includes an **Xbox / XInput-style** layout preset (10 buttons, combined trigger axis, 5 axes);
+- includes a **Generic 12-button / 4-axis DirectInput** preset;
+- lets the user edit the 1-based button numbers for A/Cross, B/Circle, X/Square, Y/Triangle, LB/L1, RB/R1, Back/Select, Start, L3 and R3;
+- generates the remaining stick, D-pad, trigger and baseball-action bindings from the selected logical layout;
+- replaces only the selected controller's existing profile while preserving other profiles in `controller.cfg`;
+- makes a one-time backup at `controller.cfg.mvp2005modern.bak` before editing an existing file;
+- provides an **Open controller.cfg** button for inspection/manual editing.
+
+The first controller configurator is deliberately conservative: it generates known controller.cfg-style bindings rather than trying to replace DirectInput or emulate XInput. Press-to-bind/live input capture can be added later if testing shows it would be useful.
+
+### Intro videos
+
+Intro-video skipping is deferred. The earlier checkbox has been removed from the visible v0.4 UI and launcher saves force the experimental setting off. The compatibility/runtime baseline itself is unaffected.
 
 External compatibility packages are downloaded directly from their official GitHub releases instead of being redistributed in the MVP2005 Modern artifact. The pinned downloads are:
 
@@ -102,7 +127,7 @@ External compatibility packages are downloaded directly from their official GitH
 
 The current launcher preview build publishes:
 
-`mvp2005modern-launcher-v0.3-x86`
+`mvp2005modern-launcher-v0.4-x86`
 
 The artifact contains `MVP2005Modern.exe`, `mvp2005fix.dll`, the upstream/third-party license notices, and setup notes. It does not contain MVP Baseball 2005, EA/MLB assets, dgVoodoo2 binaries, SafeDiscShim binaries, or a no-CD executable. First-time automatic setup therefore requires internet access and one UAC approval for SafeDiscShim.
 
@@ -113,11 +138,11 @@ The clean-machine path is intentionally supported in code now, but still needs a
 - **SafeDiscShim** — compatibility for the original game's SafeDisc launch flow. The launcher can install the official release automatically; it does not bypass the original media verification.
 - **dgVoodoo2** — modern Direct3D/DirectDraw wrapper, installed/configured automatically by the launcher when needed.
 - **mvp2005fix** — upstream resolution, widescreen and large-drive compatibility work.
-- **MVP2005 Modern runtime patches** — true borderless presentation, phase-aware mouse handling, Alt-Tab behavior, safe intro skipping and MVP-specific integration.
-- **MVP2005 Modern launcher** — integrated setup, path, resolution and compatibility configuration, with profiles/mod management planned on top.
+- **MVP2005 Modern runtime patches** — true borderless presentation, phase-aware mouse handling, Alt-Tab behavior and MVP-specific integration.
+- **MVP2005 Modern launcher** — integrated setup, path, resolution, controller and compatibility configuration, with profiles/mod management planned on top.
 
 No MVP Baseball 2005 game files, copyrighted EA/MLB assets, no-CD executable, or DRM bypass are distributed by this repository.
 
 ## Next phase
 
-After the all-in-one launcher setup path is verified on a clean/missing-dependency installation, the next work is profile and mod management: isolated profiles, backup/restore, file manifests, activation/deactivation and eventually presets such as Vanilla, modern rosters and Total Classics without making the base installation difficult to recover.
+After the controller configurator and clean-machine dependency setup are tested, the next work is profile and mod management: isolated profiles, backup/restore, file manifests, activation/deactivation and eventually presets such as Vanilla, modern rosters and Total Classics without making the base installation difficult to recover.
