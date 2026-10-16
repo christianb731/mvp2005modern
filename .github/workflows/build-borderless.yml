@@ -61,10 +61,10 @@ jobs:
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
 
-          # v4: MVP appears to poll GetCursorPos directly for menu input. Return
-          # a scaled logical cursor position while leaving the real system cursor
-          # untouched. Suppress legacy SetCursorPos warps while borderless.
+          # Keep v4's free-cursor behavior for comparison, then instrument the
+          # old DirectInput mouse path without changing its data yet.
           python3 ../patches/apply_mouse_getcursor_v4.py
+          python3 ../patches/apply_directinput_probe.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -80,7 +80,7 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - Borderless Mouse Fix v4
+          MVP2005 Modern - Borderless DirectInput Probe v5
 
           Replace the previous test mvp2005fix.exe and mvp2005fix.dll with this pair.
 
@@ -93,29 +93,34 @@ jobs:
 
           Keep the known-good dgVoodoo.conf settings.
 
-          v4 does not subclass the window and does not alter ScreenToClient or
-          ClientToScreen. Instead it hooks GetCursorPos, which MVP appears to poll
-          directly for menu input. While MVP is the foreground borderless window,
-          the physical client area is mapped into the game's current logical D3D8
-          backbuffer dimensions before the cursor position is returned to MVP.
+          This is a diagnostic build. It keeps the current borderless/free-cursor
+          behavior, but does not yet transform DirectInput mouse data.
 
-          The actual Windows cursor remains at its real physical position.
-          Legacy SetCursorPos calls are suppressed while MVP is foreground so its
-          old 640x480 fullscreen code cannot confine the real cursor again.
+          The game executable imports dinput.dll!DirectInputCreateA. This build
+          hooks that interface and logs how MVP creates/configures/reads the system
+          mouse so the next fix can target the actual menu input path.
 
-          Expected log entries:
-             GetCursorPos borderless scaling hook installed
-             SetCursorPos borderless warp suppression installed
-             borderless CreateDevice succeeded
-             GetCursorPos 1280,720 -> 320,240 client=2560x1440 logical=640x480 ...
+          After launch, move the mouse around the entire screen and click several
+          menu items, including moving outside the old top-left 800x600 area.
 
-          There should be no window-message mouse scaling line in this build.
+          Useful log entries include:
+             DirectInputCreateA probe hook installed
+             DirectInputCreateA version=...
+             DirectInput CreateDevice ... mouse=1 ...
+             DirectInput mouse device probe hooks installed
+             DirectInput SetDataFormat flags=... dataSize=... numObjs=...
+             DirectInput SetCooperativeLevel ...
+             DirectInput GetDeviceState size=... x=... y=... z=...
+             DirectInput GetDeviceData ...
+
+          SetDataFormat flags are especially important: they tell us whether MVP
+          requests relative or absolute DirectInput axes.
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-mousefix-v4-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-directinput-probe-v5-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-mousefix-v4-x86
+          name: mvp2005modern-borderless-directinput-probe-v5-x86
           path: dist/
           if-no-files-found: error
