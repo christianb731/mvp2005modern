@@ -61,10 +61,10 @@ jobs:
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
 
-          # v3: scale client-coordinate mouse messages at MVP's window-proc
-          # boundary and suppress legacy SetCursorPos warps while the borderless
-          # game window is foreground. Do not hook ScreenToClient/ClientToScreen.
-          python3 ../patches/apply_mouse_messages.py
+          # v4: MVP appears to poll GetCursorPos directly for menu input. Return
+          # a scaled logical cursor position while leaving the real system cursor
+          # untouched. Suppress legacy SetCursorPos warps while borderless.
+          python3 ../patches/apply_mouse_getcursor_v4.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -80,7 +80,7 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - Borderless Mouse Fix v3
+          MVP2005 Modern - Borderless Mouse Fix v4
 
           Replace the previous test mvp2005fix.exe and mvp2005fix.dll with this pair.
 
@@ -93,32 +93,29 @@ jobs:
 
           Keep the known-good dgVoodoo.conf settings.
 
-          v3 no longer changes ScreenToClient or ClientToScreen.
+          v4 does not subclass the window and does not alter ScreenToClient or
+          ClientToScreen. Instead it hooks GetCursorPos, which MVP appears to poll
+          directly for menu input. While MVP is the foreground borderless window,
+          the physical client area is mapped into the game's current logical D3D8
+          backbuffer dimensions before the cursor position is returned to MVP.
 
-          Instead it subclasses MVP's own game window and transforms only the
-          client-coordinate mouse messages that MVP receives (WM_MOUSEMOVE and
-          mouse button messages), mapping the physical borderless client area to
-          the current logical D3D8 backbuffer size.
-
-          It also suppresses MVP's legacy SetCursorPos calls while the borderless
-          game window is foreground. Those calls use the old 640x480 coordinate
-          space and can otherwise drag the real Windows cursor back into the
-          upper-left box.
+          The actual Windows cursor remains at its real physical position.
+          Legacy SetCursorPos calls are suppressed while MVP is foreground so its
+          old 640x480 fullscreen code cannot confine the real cursor again.
 
           Expected log entries:
+             GetCursorPos borderless scaling hook installed
              SetCursorPos borderless warp suppression installed
              borderless CreateDevice succeeded
-             borderless mouse window-message scaling installed
-             mouse message 1280,720 -> 320,240 client=2560x1440 logical=640x480
+             GetCursorPos 1280,720 -> 320,240 client=2560x1440 logical=640x480 ...
 
-          If MVP tries to warp the cursor you may also see:
-             suppressed legacy SetCursorPos ... in borderless mode
+          There should be no window-message mouse scaling line in this build.
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-mousefix-v3-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-mousefix-v4-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-mousefix-v3-x86
+          name: mvp2005modern-borderless-mousefix-v4-x86
           path: dist/
           if-no-files-found: error
