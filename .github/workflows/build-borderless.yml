@@ -1,0 +1,82 @@
+name: Build borderless runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'patches/**'
+      - '.github/workflows/build-borderless.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout MVP2005 Modern
+        uses: actions/checkout@v4
+
+      - name: Install 32-bit MinGW toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-i686 binutils-mingw-w64-i686 make git zip
+
+      - name: Clone pinned upstream mvp2005fix
+        run: |
+          git clone https://github.com/ostrich/mvp2005fix.git upstream
+          git -C upstream checkout 1c0dae9b030a8fb66648655c8d14043af1ead676
+
+      - name: Apply MVP2005 Modern borderless runtime changes
+        run: |
+          cd upstream
+          python3 ../patches/apply_borderless.py
+          git diff -- src/runtime.c
+
+      - name: Build upstream tests
+        run: make -C upstream test-build
+
+      - name: Build Windows x86 release
+        run: make -C upstream release
+
+      - name: Package test runtime
+        run: |
+          mkdir -p dist
+          cp upstream/release/mvp2005fix.exe dist/
+          cp upstream/release/mvp2005fix.dll dist/
+          cp upstream/LICENSE dist/LICENSE
+          cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
+          MVP2005 Modern - D3D8 Borderless Test
+
+          1. Back up the current mvp2005fix.exe and mvp2005fix.dll in the MVP Baseball 2005 folder.
+          2. Copy this build's mvp2005fix.exe and mvp2005fix.dll beside mvp2005.exe.
+          3. Keep the proven working dgVoodoo.conf values. Do not enable dgVoodoo fake/windowed borderless modes.
+          4. In mvp2005fix.ini add:
+
+             [Borderless]
+             Enabled=1
+
+          5. Keep [Debug] Logging=1 for the first run.
+          6. Launch through mvp2005fix.exe.
+
+          Expected log entries include:
+             config ... borderless=1
+             borderless CreateDevice ...
+             CreateDevice intercepted; patching device vtable
+             device vtable hooks installed
+
+          If MVP changes presentation state after startup you may also see:
+             borderless Reset ...
+
+          To recover, restore the backed-up upstream mvp2005fix pair and set Borderless Enabled=0.
+          EOF
+          (cd dist && zip -9 mvp2005modern-borderless-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mvp2005modern-borderless-x86
+          path: dist/
+          if-no-files-found: error
