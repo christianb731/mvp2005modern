@@ -51,7 +51,7 @@ def production_cleanup() -> None:
     # The v7 experiment installed ten USER32 probes. Production only needs the
     # three hooks that have behavioral value: suppress MVP's cursor warps and
     # transform queued mouse messages. The other seven were diagnostics only.
-    input_installer = r'''static void install_borderless_input_probe\(void\)\n\{.*?\n\}\n\n(?=typedef LONG \(WINAPI \*SetWindowLongAWinGuardFn\)'''
+    input_installer = r'''static void install_borderless_input_probe\(void\)\n\{.*?\n\}\n\n(?=typedef LONG \(WINAPI \*SetWindowLongAWinGuardFn\))'''
     input_replacement = '''static void install_borderless_input_probe(void)\n{
     HMODULE user32;
     int installed = 0;
