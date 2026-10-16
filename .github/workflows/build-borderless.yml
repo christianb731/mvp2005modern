@@ -61,17 +61,20 @@ jobs:
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
 
-          # v8 fixed front-end mouse input by scaling queued Win32 messages.
-          # v9/v10 proved gameplay repeatedly collapses the actual HWND to
-          # 1920x1440 even when SetWindowPos and Present reassert 2560x1440.
-          # v11 subclasses the final D3D HWND and rewrites WM_WINDOWPOSCHANGING
-          # / WM_STYLECHANGING after the previous WndProc returns, so Windows
-          # commits our monitor-sized borderless geometry as the final value.
+          # v8 maps physical Win32 mouse messages into MVP's logical 800x600
+          # front-end and is confirmed working in menus. v9-v11 retain the
+          # borderless window guards. With dgVoodoo AppControlledScreenMode=false
+          # the window now behaves non-exclusive, but gameplay mouse input remains
+          # wrong. v12 recognizes the real 4:3 gameplay transition (1920x1440 on
+          # a 2560x1440 monitor), resets diagnostics there, and stops applying the
+          # menu coordinate transform during gameplay so raw client coordinates
+          # reach MVP unchanged.
           python3 ../patches/apply_input_probe_v7.py
           python3 ../patches/apply_message_scale_v8.py
           python3 ../patches/apply_window_guard_v9.py
           python3 ../patches/apply_present_guard_v10.py
           python3 ../patches/apply_wndproc_geometry_guard_v11.py
+          python3 ../patches/apply_gameplay_input_phase_v12.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -87,7 +90,7 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - Final WndProc Borderless Geometry Guard v11
+          MVP2005 Modern - Phase-Aware Gameplay Mouse Passthrough v12
 
           Replace the previous test mvp2005fix.exe and mvp2005fix.dll with this pair.
 
@@ -98,38 +101,45 @@ jobs:
              [Debug]
              Logging=1
 
-          Keep the known-good dgVoodoo.conf settings.
+          For this test keep the dgVoodoo setting that produced non-exclusive
+          gameplay behavior:
 
-          v8 remains the working front-end mouse fix: queued client mouse messages
-          are mapped from the physical borderless client into MVP's logical 800x600
-          front-end coordinate system.
+             [DirectX]
+             AppControlledScreenMode = false
 
-          The v10 log proved that the gameplay transition is still able to leave
-          the *actual* game HWND at 1920x1440 even after our SetWindowPos hook and
-          per-Present guard request 2560x1440. That means the requested geometry is
-          being modified later in the Win32 window-change path.
+          Keep your other current dgVoodoo settings unchanged.
 
-          v11 subclasses the final MVP D3D window. For WM_WINDOWPOSCHANGING and
-          WM_STYLECHANGING it first lets MVP/dgVoodoo process the message, then
-          overwrites the mutable structure immediately before Windows commits it.
-          This makes the monitor-sized borderless rectangle the final value rather
-          than merely another SetWindowPos request that can be rewritten afterward.
+          v8 remains active in menus, where the physical 2560x1440 client must be
+          mapped into MVP's logical 800x600 front-end coordinate space.
+
+          The clean AppControlledScreenMode=false trace showed that the previous
+          gameplay-phase detector fired too early during initial 640x480 startup.
+          v12 detects only the characteristic 4:3 same-height gameplay request
+          (1920x1440 on a 2560x1440 monitor) while MVP's logical backbuffer is
+          800x600.
+
+          At that exact transition v12:
+            - marks gameplay mode,
+            - resets bounded input/geometry/SetCursorPos diagnostics,
+            - stops v8 mouse-coordinate scaling,
+            - passes gameplay queued mouse messages to MVP unchanged.
 
           Useful log lines:
-             final borderless WndProc geometry guard installed
-             WndProc guard WM_WINDOWPOSCHANGING ... -> 0,0 2560x1440
-             WndProc guard WM_STYLECHANGING ...
-             Present borderless drift ...
+             gameplay 4:3 transition detected; mouse scaling disabled and diagnostics reset
+             probe PeekMessageA raw msg=...
+             PeekMessageA gameplay passthrough msg=...
+             probe suppressed SetCursorPos ...
+             probe GetCursorPos raw=...
 
-          Test menus, load fully into a game, and check whether the game remains
-          2560x1440 borderless and whether the mouse remains aligned. Send the new
-          mvp2005fix.log if anything is still wrong.
+          Test menus first to confirm they still work, then load fully into a game
+          and test mouse input around all four corners and center. Send the resulting
+          mvp2005fix.log if gameplay mouse input is still incorrect.
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-wndproc-guard-v11-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-gameplay-mouse-v12-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-wndproc-guard-v11-x86
+          name: mvp2005modern-borderless-gameplay-mouse-v12-x86
           path: dist/
           if-no-files-found: error
