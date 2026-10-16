@@ -16,6 +16,7 @@ on:
       - 'patches/apply_controller_action_layout_v12.py'
       - 'patches/apply_controller_runtime_remap_v13.py'
       - 'patches/apply_controller_usability_v14.py'
+      - 'patches/apply_controller_canonical_xbox_v15.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -55,6 +56,7 @@ jobs:
           python3 ../patches/apply_controller_action_layout_v12.py
           python3 ../patches/apply_controller_runtime_remap_v13.py
           python3 ../patches/apply_controller_usability_v14.py
+          python3 ../patches/apply_controller_canonical_xbox_v15.py
           git diff --check
           git diff --stat
 
@@ -71,52 +73,60 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.14
+          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.15
 
-          Controller usability + trigger calibration
-          ------------------------------------------
-          v0.13 proved the runtime normalization fixed the one-position button
-          mismatch: face buttons and Start now behave correctly on the Flydigi.
+          Canonical Xbox controller state
+          -------------------------------
+          The user's v0.14 files confirmed that button calibration itself is
+          correct: A/B/X/Y/LB/RB/View/Start/L3/R3 are physical DI indices 0-9.
+          They also confirmed the Flydigi exposes LT as axis+3 and RT as axis-3.
 
-          v0.14 focuses on the controls that were still unhelpful or inactive:
+          The remaining instability came from mixing those modern physical axis
+          semantics with MVP's 2005-era Xbox profile. v0.15 now treats calibration
+          as hardware input only and presents MVP with one canonical logical pad:
 
-            - Controller calibration now learns LT and RT as real DirectInput
-              axes instead of assuming every modern pad uses axis 3.
-            - Learned trigger bindings are saved in mvp2005fix.ini and reused.
-            - The modern Xbox action defaults are made easier to understand/test:
-                LB = fielder switch
-                RB = pitch 5
-                LT = advance all runners
-                RT = relay/cutoff throw + retreat all runners
-                L3 = pitch history + intentional hit batter
-                R3 = bunt + intentional walk
-                View = select + fake rundown throw
-            - Face-button and Start runtime normalization from v0.13 remains.
+            A/B/X/Y       = logical buttons 1/2/3/4
+            LB/RB         = logical buttons 5/6
+            View/Start    = logical buttons 7/8
+            L3/R3         = logical buttons 9/10
+            LT            = canonical axis-3
+            RT            = canonical axis+3
+
+          The injected runtime normalizes BOTH buttons and trigger axis state before
+          MVP reads it. On the tested Flydigi, the raw trigger axis is inverted at
+          runtime so the game always sees the same trigger orientation as the
+          long-established Xbox 360 controller.cfg profile.
+
+          The generated baseball actions now follow that established profile:
+            A/B/X/Y = home/first/third/second throws and pitches 1-4
+            RB      = pitch 5 / retreat all / fake rundown
+            LB      = fielder switch / advance all
+            RT      = relay/cutoff throw
+            L3      = pitch history
+            R3      = bunt
+
+          Faster tuning workflow:
+            - Physical controller calibration should no longer require a new build.
+            - Baseball action assignments live in controller.cfg and can be changed
+              either in MVP's own My MVP > My MVP Options > Controller Config menu
+              or through the launcher's Open controller.cfg button.
+            - Future action-map tweaks should not require recompiling the launcher.
 
           Test procedure:
-            1. Open Controller Setup.
-            2. Leave Xbox-style selected.
-            3. Run "Calibrate buttons + triggers..." once.
-            4. After the ten buttons, release both triggers and center both sticks.
-            5. Follow the LT and RT prompts.
-            6. Click Save to MVP.
-            7. Test:
-                pitching: RB = pitch 5 (when pitcher has one), L3 = pitch history
-                batting: R3 = bunt
-                fielding: LB = fielder switch, RT = relay/cutoff
-                baserunning: LT = advance all, RT = retreat all
-
-          These controls are context-sensitive by design, so a control can be
-          inactive in a game state where its assigned baseball action does not apply.
+            1. Open Controller Setup and click Save to MVP once. Recalibration is
+               not required because the uploaded v0.14 hardware values are valid.
+            2. Launch a game.
+            3. First verify B throws to first, X throws to third, and Start pauses.
+            4. Then test LB/RB/L3/R3 and LT/RT in their relevant game contexts.
 
           Compatibility setup remains unchanged from the verified RC1 launcher path.
           Intro-video skipping remains disabled for now.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.14-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.15-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.14-x86
+          name: mvp2005modern-launcher-v0.15-x86
           path: dist/
           if-no-files-found: error
