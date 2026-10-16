@@ -5,8 +5,10 @@ on:
     branches: [main]
     paths:
       - 'patches/apply_production_rc1.py'
+      - 'patches/apply_skip_intro_runtime_v3.py'
       - 'patches/apply_modern_launcher_v1.py'
       - 'patches/apply_modern_launcher_v2.py'
+      - 'patches/apply_modern_launcher_v3.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -35,8 +37,10 @@ jobs:
         run: |
           cd upstream
           python3 ../patches/apply_production_rc1.py
+          python3 ../patches/apply_skip_intro_runtime_v3.py
           python3 ../patches/apply_modern_launcher_v1.py
           python3 ../patches/apply_modern_launcher_v2.py
+          python3 ../patches/apply_modern_launcher_v3.py
           git diff --check
           git diff --stat
 
@@ -53,46 +57,51 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.2
+          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.3
 
-          This preview combines the verified RC1 compatibility runtime with the
-          automatic setup behavior intended for the final MVP2005 Modern launcher.
+          Goal: one launcher that prepares a normal user-owned MVP Baseball 2005
+          installation for modern Windows without requiring SafeDiscShim or
+          dgVoodoo2 to already be installed.
 
           Put MVP2005Modern.exe and mvp2005fix.dll together and run the launcher.
           It can live in the game directory or elsewhere. Select mvp2005.exe if it
           is not detected automatically.
 
-          On Launch, MVP2005 Modern now verifies the complete compatibility stack:
+          On Launch, MVP2005 Modern verifies the complete compatibility stack:
 
           - SafeDiscShim v0.9.0
               If missing, the launcher downloads the official GitHub release,
               verifies SHA-256, and runs the official installer. Windows will show
               one UAC prompt because SafeDiscShim is a system-level compatibility
-              component. SafeDiscShim does not bypass disc verification; the
-              original SafeDisc flow still requires the user's legitimate media.
+              component. SafeDiscShim preserves the original SafeDisc/media check.
 
           - dgVoodoo2 v2.87.5
               If the local wrapper is missing/incomplete, the launcher downloads
               the official GitHub release, verifies SHA-256, and installs the x86
               D3D8.dll, DDraw.dll and D3DImm.dll plus dgVoodoo.conf beside the game.
-              Existing files are backed up under MVP2005Modern.Backup before repair.
+              Existing compatibility files are backed up before repair.
 
           - MVP2005 Modern RC1 runtime
               The included mvp2005fix.dll provides the verified resolution,
               widescreen, true-borderless, mouse-lifecycle and Alt-Tab fixes.
 
-          The launcher configures the known-good dgVoodoo MVP profile automatically,
+          The launcher applies the known-good MVP dgVoodoo profile automatically,
           including FullScreenMode=false and AppControlledScreenMode=false.
 
-          New option: Skip EA Sports / MVP intro videos
-              This is reversible. When enabled, the launcher backs up
-              data\frontend\movies\easports.vp6 and mvpintro.vp6 and replaces them
-              with blank files. Turning the option off restores the saved originals.
+          Skip EA Sports / MVP intro videos
+              v0.3 no longer changes or blanks the VP6 files. The injected runtime
+              disables MVP's own internal ENABLE_FRONTEND_MOVIES setting before the
+              game starts. This avoids the crash seen with zero-byte VP6 files.
+
+              If v0.2 previously created blank VP6 files, v0.3 restores the originals
+              from MVP2005Modern.Backup\intro automatically before launch.
 
           The Setup / Repair button explicitly re-checks SafeDiscShim and refreshes
           the pinned dgVoodoo files while retaining backups.
 
-          First-time automatic setup requires internet access.
+          A genuinely clean Windows 10/11 machine is an intended supported setup.
+          First-time automatic setup requires internet access and one UAC approval
+          for SafeDiscShim. That clean-machine path still needs real-world testing.
 
           Pinned external downloads:
             SafeDiscShim v0.9.0 installer
@@ -103,11 +112,11 @@ jobs:
           This artifact does not contain MVP Baseball 2005, EA/MLB assets,
           dgVoodoo2 binaries, SafeDiscShim binaries, or a no-CD executable.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.2-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.3-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.2-x86
+          name: mvp2005modern-launcher-v0.3-x86
           path: dist/
           if-no-files-found: error
