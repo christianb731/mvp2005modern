@@ -61,12 +61,13 @@ jobs:
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
 
-          # v7 proved MVP receives raw physical WM_MOUSEMOVE coordinates directly
-          # from PeekMessageA while its D3D front end remains logically 800x600.
-          # Keep the probe infrastructure, then transform returned client mouse
-          # messages into logical D3D coordinates before MVP sees or dispatches them.
+          # v8 fixed the front-end mouse by scaling queued Win32 mouse messages.
+          # The gameplay transition does not Reset or recreate the D3D8 device,
+          # so v9 additionally prevents MVP from shrinking/redecorating/moving the
+          # already-borderless HWND when the 3D game scene starts.
           python3 ../patches/apply_input_probe_v7.py
           python3 ../patches/apply_message_scale_v8.py
+          python3 ../patches/apply_window_guard_v9.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -82,7 +83,7 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - Borderless Queued Mouse Scaling v8
+          MVP2005 Modern - Persistent Borderless Gameplay Guard v9
 
           Replace the previous test mvp2005fix.exe and mvp2005fix.dll with this pair.
 
@@ -95,33 +96,43 @@ jobs:
 
           Keep the known-good dgVoodoo.conf settings.
 
-          The v7 probe found the strongest input-path evidence yet: MVP is actively
-          retrieving WM_MOUSEMOVE through PeekMessageA, and Windows is returning
-          physical borderless client coordinates such as 1570,721 while MVP's
-          front-end D3D device remains logically 800x600.
+          v8 successfully fixed the front-end/menu mouse by mapping queued Win32
+          client mouse messages from the physical borderless client into MVP's
+          logical 800x600 front-end coordinate system.
 
-          v8 transforms client-coordinate mouse messages immediately after
-          PeekMessageA/GetMessageA returns them to MVP. Both MSG.lParam and MSG.pt
-          are mapped from the physical borderless client into the logical D3D8
-          front-end size. The real Windows cursor is not moved.
+          The next test log showed that entering gameplay did NOT call D3D8 Reset
+          and did NOT create a new D3D8 device. Instead, the same device continued
+          directly into shader activity. That points to MVP changing the HWND's
+          style/placement during the gameplay transition.
 
-          Mouse wheel messages are intentionally left alone because their lParam
-          uses screen coordinates under Win32. MVP's legacy SetCursorPos warps are
-          still suppressed so the physical cursor remains free.
+          v9 therefore keeps the v8 message scaling and adds a persistent guard on:
+             SetWindowLongA
+             SetWindowPos
+             MoveWindow
+             SetWindowPlacement
 
-          Expected log example at 2560x1440 -> 800x600:
-             probe PeekMessageA raw msg=0200 ... lparam=1600,720 ...
-             PeekMessageA scaled msg=0200 lparam=1600,720 -> 500,300 ...
+          Once MVP's D3D window is known, attempts to add borders, shrink it, or
+          reposition it are forced back to the monitor-sized borderless rectangle.
 
-          Test hovering and clicking across the entire screen, especially controls
-          well outside the old upper-left 800x600 physical region. Send the log if
-          behavior is still wrong or if cursor position and hover targets diverge.
+          Useful log lines:
+             borderless window guard installed hooks=4/4
+             window guard SetWindowLongA ... requested=... forced=...
+             window guard SetWindowPos request=...
+             window guard MoveWindow request=...
+             window guard SetWindowPlacement request=...
+
+          Test the menus, then load all the way into an actual game. Verify:
+            1. the menu mouse still works over the entire monitor;
+            2. the game remains borderless after the 3D scene loads;
+            3. mouse hit-testing is still aligned in gameplay.
+
+          If anything changes at the gameplay transition, send the new log.
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-message-mousefix-v8-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-gameplay-guard-v9-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-message-mousefix-v8-x86
+          name: mvp2005modern-borderless-gameplay-guard-v9-x86
           path: dist/
           if-no-files-found: error
