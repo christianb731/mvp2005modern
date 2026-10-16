@@ -61,19 +61,16 @@ jobs:
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
 
-          # Restore the known-good mouse path from the successful build:
-          # v8 scales front-end mouse messages, v12 adds gameplay phase state,
-          # and the robust v13 detector recognizes the raw large 4:3 gameplay
-          # request and enables raw queued mouse passthrough.
-          # v14 adds only focus/window diagnostics for Alt-Tab; it intentionally
-          # makes no focus/minimize behavior changes.
+          # Known-good mouse path: v8 scales front-end messages and the current
+          # v12 patch already contains the robust large-4:3 gameplay detector that
+          # switches gameplay to raw queued mouse passthrough. Apply it exactly once.
+          # v14 adds diagnostics only; no Alt-Tab/focus behavior changes.
           python3 ../patches/apply_input_probe_v7.py
           python3 ../patches/apply_message_scale_v8.py
           python3 ../patches/apply_window_guard_v9.py
           python3 ../patches/apply_present_guard_v10.py
           python3 ../patches/apply_wndproc_geometry_guard_v11.py
           python3 ../patches/apply_gameplay_input_phase_v12.py
-          python3 ../patches/apply_gameplay_input_phase_v13.py
           python3 ../patches/apply_alt_tab_probe_v14.py
           git diff -- src/runtime.c
 
@@ -92,14 +89,13 @@ jobs:
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
           MVP2005 Modern - Known-Good Mouse + Alt-Tab Diagnostic v14
 
-          This build restores the known-good gameplay mouse detector from the build
-          that the user confirmed worked perfectly. The previous v13 workflow
-          accidentally omitted that detector and regressed gameplay mouse input.
+          This build uses the exact robust gameplay mouse phase logic from the
+          known-good build: menus use 2560x1440 -> logical 800x600 scaling, while
+          gameplay switches to raw queued mouse input on MVP's large 4:3 request.
 
-          v14 does NOT attempt another Alt-Tab behavior fix. It only logs the focus,
+          v14 does NOT attempt another Alt-Tab behavior fix. It only logs focus,
           activation, visibility, minimize, geometry, and style transitions so the
-          remaining semi-exclusive -> borderless-after-first-Alt-Tab behavior can be
-          identified from evidence.
+          semi-exclusive -> borderless-after-first-Alt-Tab behavior can be identified.
 
           Keep:
              [Borderless]
@@ -113,7 +109,7 @@ jobs:
 
           Test:
             1. Confirm menu mouse works.
-            2. Enter gameplay and confirm gameplay mouse is back to the known-good state.
+            2. Enter gameplay and confirm gameplay mouse is in the known-good state.
             3. Alt-Tab out once, return, then Alt-Tab out a second time.
             4. Exit and send mvp2005fix.log.
 
