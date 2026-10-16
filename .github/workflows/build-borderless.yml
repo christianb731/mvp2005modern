@@ -61,11 +61,10 @@ jobs:
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
 
-          # Keep the working free-cursor behavior. v6 additionally scales the
-          # relative DirectInput mouse deltas that MVP uses for its internal
-          # 800x600 menu cursor so physical monitor motion maps to that logical area.
-          python3 ../patches/apply_mouse_getcursor_v4.py
-          python3 ../patches/apply_directinput_scale_v6.py
+          # v7 is diagnostic.  Do not scale GetCursorPos, window messages, or
+          # DirectInput.  Keep only SetCursorPos suppression so the physical
+          # cursor stays free, and trace the remaining Win32 input/geometry paths.
+          python3 ../patches/apply_input_probe_v7.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -81,7 +80,7 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - Borderless DirectInput Mouse Fix v6
+          MVP2005 Modern - Borderless Input Path Probe v7
 
           Replace the previous test mvp2005fix.exe and mvp2005fix.dll with this pair.
 
@@ -94,33 +93,42 @@ jobs:
 
           Keep the known-good dgVoodoo.conf settings.
 
-          The v5 probe confirmed MVP creates the system mouse through DirectInput 7
-          with DIDF_RELAXIS (relative axes), a 16-byte mouse state, and
-          NONEXCLUSIVE|FOREGROUND cooperative level.
+          v7 is intentionally diagnostic. Previous tests proved:
+            - ScreenToClient scaling did not fix menu hit-testing.
+            - Window-procedure mouse-message scaling did not fix it.
+            - GetCursorPos scaling executed correctly but did not fix it.
+            - DirectInput creates a relative system mouse, but the menu did not
+              actually read mouse deltas through the instrumented state/data path.
 
-          v6 scales those relative X/Y deltas from the physical borderless client
-          size into MVP's current logical D3D8 backbuffer size. At 2560x1440 with
-          an 800x600 logical menu, roughly 2560 physical pixels of horizontal mouse
-          travel now accumulate to 800 logical pixels instead of hitting MVP's
-          internal right edge after only ~800 physical pixels.
+          This build therefore stops transforming those coordinates. It only
+          suppresses MVP's legacy SetCursorPos warps so the physical cursor stays
+          free, then logs Win32 message-queue and geometry APIs that may feed the
+          front-end before DispatchMessage.
 
-          Fractional remainders are preserved so slow/small mouse movements are not
-          rounded away. Buttons and wheel input are left unchanged.
+          After launch, spend 10-15 seconds moving the mouse throughout the entire
+          monitor, especially from inside the old 800x600 corner region to far
+          outside it. Hover and click several menu controls.
 
-          Expected log entries:
-             DirectInput relative mouse scaler installed
-             DirectInput system mouse created
-             DirectInput relative mouse scaling hooks installed
-             DirectInput mouse format flags=00000002 relative=1 dataSize=16 numObjs=7
-             DirectInput mouse delta ... -> ... client=2560x1440 logical=800x600
+          Useful lines include:
+             borderless input probe installed hooks=.../10
+             probe PeekMessageA msg=0200 ... lparam=... pt=...
+             probe GetMessageA msg=0200 ... lparam=... pt=...
+             probe GetMessagePos=...
+             probe GetCursorPos raw=...
+             probe ScreenToClient ... -> ...
+             probe GetClientRect=... size=...
+             probe GetWindowRect=... size=...
+             probe GetSystemMetrics ...
+             probe ClipCursor=...
+             probe suppressed SetCursorPos ...
 
-          Move the mouse across the entire monitor and test menu hover/click targets.
+          Send the resulting mvp2005fix.log.
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-directinput-mousefix-v6-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-input-probe-v7-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-directinput-mousefix-v6-x86
+          name: mvp2005modern-borderless-input-probe-v7-x86
           path: dist/
           if-no-files-found: error
