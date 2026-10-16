@@ -50,6 +50,24 @@ jobs:
           PY
 
           python3 ../patches/apply_failsafe.py
+
+          # D3D8 requires a windowed swap chain to use the default presentation
+          # interval. MVP's fullscreen request uses interval=1; carrying that
+          # value into Windowed=TRUE produces D3DERR_INVALIDCALL (0x8876086C).
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/runtime.c')
+          s = p.read_text(encoding='utf-8')
+          needle = '    pp->FullScreen_RefreshRateInHz = 0;\n'
+          count = s.count(needle)
+          if count < 2:
+              raise SystemExit(f'expected at least 2 borderless refresh assignments, found {count}')
+          replacement = needle + '    pp->FullScreen_PresentationInterval = 0;\n'
+          s = s.replace(needle, replacement)
+          p.write_text(s, encoding='utf-8')
+          print(f'normalized D3D8 windowed presentation interval at {count} sites')
+          PY
+
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -78,13 +96,13 @@ jobs:
           5. Keep [Debug] Logging=1 for the first run.
           6. Launch through mvp2005fix.exe.
 
-          This build is fail-safe: if the borderless Direct3D8 CreateDevice call fails,
-          it logs the HRESULT and retries immediately with MVP's original fullscreen
-          parameters. The game should therefore still launch even when borderless fails.
+          This build forces D3D8 windowed PresentationInterval to Default (0).
+          If borderless CreateDevice still fails, it logs the HRESULT and retries
+          immediately with MVP's original fullscreen parameters.
 
           Useful log entries:
-             original CreateDevice ...
-             borderless CreateDevice try ...
+             original CreateDevice ... interval=1
+             borderless CreateDevice try ... interval=0
              borderless CreateDevice succeeded
 
           or, on failure:
