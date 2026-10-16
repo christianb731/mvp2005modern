@@ -61,10 +61,12 @@ jobs:
           print(f'normalized D3D8 windowed presentation interval at {count} sites')
           PY
 
-          # v7 is diagnostic.  Do not scale GetCursorPos, window messages, or
-          # DirectInput.  Keep only SetCursorPos suppression so the physical
-          # cursor stays free, and trace the remaining Win32 input/geometry paths.
+          # v7 proved MVP receives raw physical WM_MOUSEMOVE coordinates directly
+          # from PeekMessageA while its D3D front end remains logically 800x600.
+          # Keep the probe infrastructure, then transform returned client mouse
+          # messages into logical D3D coordinates before MVP sees or dispatches them.
           python3 ../patches/apply_input_probe_v7.py
+          python3 ../patches/apply_message_scale_v8.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -80,7 +82,7 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - Borderless Input Path Probe v7
+          MVP2005 Modern - Borderless Queued Mouse Scaling v8
 
           Replace the previous test mvp2005fix.exe and mvp2005fix.dll with this pair.
 
@@ -93,42 +95,33 @@ jobs:
 
           Keep the known-good dgVoodoo.conf settings.
 
-          v7 is intentionally diagnostic. Previous tests proved:
-            - ScreenToClient scaling did not fix menu hit-testing.
-            - Window-procedure mouse-message scaling did not fix it.
-            - GetCursorPos scaling executed correctly but did not fix it.
-            - DirectInput creates a relative system mouse, but the menu did not
-              actually read mouse deltas through the instrumented state/data path.
+          The v7 probe found the strongest input-path evidence yet: MVP is actively
+          retrieving WM_MOUSEMOVE through PeekMessageA, and Windows is returning
+          physical borderless client coordinates such as 1570,721 while MVP's
+          front-end D3D device remains logically 800x600.
 
-          This build therefore stops transforming those coordinates. It only
-          suppresses MVP's legacy SetCursorPos warps so the physical cursor stays
-          free, then logs Win32 message-queue and geometry APIs that may feed the
-          front-end before DispatchMessage.
+          v8 transforms client-coordinate mouse messages immediately after
+          PeekMessageA/GetMessageA returns them to MVP. Both MSG.lParam and MSG.pt
+          are mapped from the physical borderless client into the logical D3D8
+          front-end size. The real Windows cursor is not moved.
 
-          After launch, spend 10-15 seconds moving the mouse throughout the entire
-          monitor, especially from inside the old 800x600 corner region to far
-          outside it. Hover and click several menu controls.
+          Mouse wheel messages are intentionally left alone because their lParam
+          uses screen coordinates under Win32. MVP's legacy SetCursorPos warps are
+          still suppressed so the physical cursor remains free.
 
-          Useful lines include:
-             borderless input probe installed hooks=.../10
-             probe PeekMessageA msg=0200 ... lparam=... pt=...
-             probe GetMessageA msg=0200 ... lparam=... pt=...
-             probe GetMessagePos=...
-             probe GetCursorPos raw=...
-             probe ScreenToClient ... -> ...
-             probe GetClientRect=... size=...
-             probe GetWindowRect=... size=...
-             probe GetSystemMetrics ...
-             probe ClipCursor=...
-             probe suppressed SetCursorPos ...
+          Expected log example at 2560x1440 -> 800x600:
+             probe PeekMessageA raw msg=0200 ... lparam=1600,720 ...
+             PeekMessageA scaled msg=0200 lparam=1600,720 -> 500,300 ...
 
-          Send the resulting mvp2005fix.log.
+          Test hovering and clicking across the entire screen, especially controls
+          well outside the old upper-left 800x600 physical region. Send the log if
+          behavior is still wrong or if cursor position and hover targets diverge.
           EOF
-          (cd dist && zip -9 mvp2005modern-borderless-input-probe-v7-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-message-mousefix-v8-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-borderless-input-probe-v7-x86
+          name: mvp2005modern-borderless-message-mousefix-v8-x86
           path: dist/
           if-no-files-found: error
