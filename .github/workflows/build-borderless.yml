@@ -69,6 +69,7 @@ jobs:
           python3 ../patches/apply_gameplay_input_phase_v12.py
           python3 ../patches/apply_alt_tab_probe_v14.py
           python3 ../patches/apply_true_borderless_v15.py
+          python3 ../patches/apply_frontend_return_alt_tab_v16.py
           git diff -- src/runtime.c
 
       - name: Build upstream tests
@@ -84,10 +85,9 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/
           cp upstream/LICENSE dist/LICENSE
           cat > dist/TEST-INSTRUCTIONS.txt <<'EOF'
-          MVP2005 Modern - True Borderless Gameplay + Alt-Tab v15
+          MVP2005 Modern - Frontend Return + Alt-Tab v16
 
-          This build targets the dgVoodoo configuration where gameplay is truly
-          borderless immediately:
+          Keep the now-working dgVoodoo true-borderless configuration:
 
              [General]
              FullScreenMode = false
@@ -95,36 +95,39 @@ jobs:
              [DirectX]
              AppControlledScreenMode = false
 
-          Keep all other known-good dgVoodoo settings unchanged.
+          v16 preserves the v15 behavior that worked in gameplay and adds:
 
-          Why v15 exists:
-          - With FullScreenMode=false, MVP no longer emits the old 1920x1440
-            gameplay resize. That meant the v12 detector never switched from the
-            front-end 800x600 mouse scaler to raw gameplay input, producing the
-            bottom-right-only mouse problem again.
-          - v15 also treats the monitor-sized MoveWindow request immediately before
-            gameplay as a gameplay-phase signal, while retaining the old 4:3 signal.
-          - The v14 focus trace showed Present reasserting the window while Windows
-            had intentionally minimized/deactivated it during Alt-Tab. v15 skips
-            Present-time geometry enforcement while MVP is inactive/minimized/hidden.
+          - automatic mouse phase recovery after leaving a match. While MVP is
+            actively submitting 3D gameplay projection matrices, queued mouse
+            messages are passed through raw. After gameplay 3D rendering has
+            stopped for 750 ms, the next mouse message restores the known-good
+            physical -> logical 800x600 frontend scaling. 3D activity can switch
+            raw gameplay input back on again automatically.
+
+          - true-borderless Alt-Tab handling. MVP's legacy ShowWindow minimize
+            requests and SC_MINIMIZE are suppressed for the tracked game window,
+            so Alt-Tab should transfer focus without minimizing/restoring MVP.
 
           Test:
-            1. Confirm menus work normally.
-            2. Enter gameplay. Mouse should work across the whole game immediately.
-            3. Alt-Tab out and back several times.
-            4. Send mvp2005fix.log if either behavior is still wrong.
+            1. Start in the main menu and confirm mouse mapping is correct.
+            2. Enter a match and confirm gameplay mouse remains correct.
+            3. Quit the match back to the main menu, wait about one second, and
+               confirm the full-screen menu mouse mapping works again.
+            4. Alt-Tab out and back several times from gameplay and from the menu.
+            5. Send mvp2005fix.log if either issue remains.
 
-          Expected gameplay log line with FullScreenMode=false:
+          Useful v16 log lines:
              gameplay monitor-sized MoveWindow detected; raw mouse passthrough enabled
-
-          Expected during Alt-Tab: focus probe lines may show iconic=1, but there
-          should be no Present borderless drift ... reasserting while iconic=1.
+             frontend render phase detected; 800x600 mouse scaling restored
+             3D gameplay rendering resumed; raw mouse passthrough enabled
+             window guard suppressed ShowWindow minimize cmd=...
+             WndProc guard suppressed SC_MINIMIZE for borderless Alt-Tab
           EOF
-          (cd dist && zip -9 mvp2005modern-true-borderless-v15-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
+          (cd dist && zip -9 mvp2005modern-borderless-lifecycle-v16-x86.zip mvp2005fix.exe mvp2005fix.dll LICENSE TEST-INSTRUCTIONS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-true-borderless-v15-x86
+          name: mvp2005modern-borderless-lifecycle-v16-x86
           path: dist/
           if-no-files-found: error
