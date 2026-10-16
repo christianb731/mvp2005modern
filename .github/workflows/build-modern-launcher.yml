@@ -12,11 +12,8 @@ on:
       - 'patches/apply_controller_configurator_v4.py'
       - 'patches/apply_controller_configurator_v5.py'
       - 'patches/apply_controller_configurator_v6.py'
-      - 'patches/apply_controller_configurator_v7.py'
       - 'patches/apply_controller_configurator_v8.py'
-      - 'patches/apply_controller_runtime_probe_v9.py'
-      - 'patches/apply_controller_runtime_probe_v10.py'
-      - 'patches/apply_controller_runtime_probe_v11.py'
+      - 'patches/apply_controller_action_layout_v12.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -53,9 +50,7 @@ jobs:
           python3 ../patches/apply_controller_configurator_v5.py
           python3 ../patches/apply_controller_configurator_v6.py
           python3 ../patches/apply_controller_configurator_v8.py
-          python3 ../patches/apply_controller_runtime_probe_v9.py
-          python3 ../patches/apply_controller_runtime_probe_v10.py
-          python3 ../patches/apply_controller_runtime_probe_v11.py
+          python3 ../patches/apply_controller_action_layout_v12.py
           git diff --check
           git diff --stat
 
@@ -72,44 +67,54 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.11
+          MVP Baseball 2005 Modern - All-in-One Launcher Preview v0.12
 
-          Controller diagnostic build v11
-          --------------------------------
-          v0.10 proved that the controller's physical DirectInput button stream is
-          exactly the normal one-based MVP mapping:
-            X -> MVP button 3
-            LB -> MVP button 5
-            Menu/Start -> MVP button 8
-            L3 -> MVP button 9
-            A/B/Y/RB/R3 -> buttons 1/2/4/6/10
+          Controller action-layout correction
+          -----------------------------------
+          Runtime diagnostics in v0.9-v0.11 proved three things:
 
-          That matches controller.cfg and the long-standing working Xbox 360 MVP
-          profile, so button numbering is no longer the suspected problem.
+            1. The physical controller calibration is correct.
+            2. MVP itself sees the expected button IDs (A=1, B=2, X=3, Y=4,
+               LB=5, RB=6, View=7, Start=8, L3=9, R3=10).
+            3. The active DirectInput device is exactly
+               "Controller (Flydigi VADER3)".
 
-          MVP creates many DirectInput joystick devices. v0.11 identifies the
-          exact instance/product name of every device MVP creates and includes that
-          identity on the device that actually produces button transitions. This
-          tests whether controller.cfg is being written for a different device name
-          than the one MVP is actively polling.
+          Therefore the remaining bug was not device detection or numbering. The
+          v0.6 launcher had changed several MVP baseball-action assignments away
+          from the long-standing known-good Xbox controller profile.
+
+          v0.12 restores the established MVP action layout while still using the
+          user's learned physical button IDs:
+
+            A   = normal swing / pitch 1 / throw home
+            B   = pitch 2 / throw first
+            X   = pitch 3 / bunt / throw third / cutoff throw
+            Y   = pitch 4 / throw second / charge mound
+            LB  = relay throw
+            RB  = pitch 5 / fielder switch / fake rundown throw
+            LT  = pitch history / advance all runners
+            RT  = retreat all runners
+            L3  = intentional hit batter
+            R3  = intentional walk
+            Start = pause/menu
+
+          The v0.9-v0.11 runtime probes are intentionally removed from this normal
+          test build so mvp2005controller.log is no longer produced.
 
           Test procedure:
-            1. Launch MVP normally through MVP2005Modern.exe.
-            2. Press X once (a few other buttons are fine too).
-            3. Quit the game.
-            4. Paste/upload mvp2005controller.log.
-
-          Look for "controller identity" lines and the "buttons self=... instance="
-          line. No controller.cfg changes are made by this diagnostic.
+            1. Open Controller Setup.
+            2. Recalibrate if desired (existing learned values should already be OK).
+            3. Click Save to MVP so controller.cfg receives the corrected action map.
+            4. Test X, LB, RB, Start and L3 in gameplay.
 
           Compatibility setup remains unchanged from the verified RC1 launcher path.
           Intro-video skipping remains disabled for now.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.11-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.12-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.11-x86
+          name: mvp2005modern-launcher-v0.12-x86
           path: dist/
           if-no-files-found: error
