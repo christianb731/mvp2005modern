@@ -138,12 +138,12 @@ jobs:
           7. Press Ctrl+F8, release, press B once.
           8. Press Ctrl+F5, release, press B once.
           9. Press Ctrl+F6 to return to the v13-style mode.
-         10. Move the LEFT stick fully right, then fully left, then center it.
-         11. Press/release LB, RB, L3, R3, LT, RT one at a time.
-         12. Optional but extremely useful if B has still never thrown to first:
-             run Ctrl+1 + B, Ctrl+2 + B, ... Ctrl+0 + B and note which numbered
-             slot (if any) throws to first. You do not need to restart the game.
-         13. Quit and upload mvp2005controller_diagnostic.log.
+          10. Move the LEFT stick fully right, then fully left, then center it.
+          11. Press/release LB, RB, L3, R3, LT, RT one at a time.
+          12. Optional but extremely useful if B has still never thrown to first:
+              run Ctrl+1 + B, Ctrl+2 + B, ... Ctrl+0 + B and note which numbered
+              slot (if any) throws to first. You do not need to restart the game.
+          13. Quit and upload mvp2005controller_diagnostic.log.
 
           The purpose of v0.17 is evidence, not another guessed mapping. The next
           controller change should be based on this single log plus the observed
