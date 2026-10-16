@@ -51,7 +51,7 @@ static LRESULT CALLBACK borderless_geometry_wndproc(HWND hwnd, UINT msg,
     LRESULT result;
     WNDPROC previous = borderless_geometry_guard_original_proc;
 
-    /* Let MVP/dgVoodoo process the message first.  For the CHANGING messages,
+    /* Let MVP/dgVoodoo process the message first. For the CHANGING messages,
      * Windows consumes the mutable structure only after the window proc returns,
      * so rewriting it here makes our geometry/style the final committed value. */
     result = previous ? CallWindowProcA(previous, hwnd, msg, wparam, lparam) :
@@ -144,11 +144,27 @@ static void install_borderless_geometry_wndproc(HWND hwnd)
 '''
 text = text.replace(marker, code + marker, 1)
 
-replace_once(
-'''        log_line("borderless CreateDevice succeeded\\\\n");\n        make_borderless_window(borderless_window);\n''',
-'''        log_line("borderless CreateDevice succeeded\\\\n");\n        make_borderless_window(borderless_window);\n        install_borderless_geometry_wndproc(borderless_window);\n''',
-"install final geometry WndProc after CreateDevice",
+# Insert the subclass installation into the successful borderless CreateDevice
+# branch without matching the diagnostic string itself. Earlier patch stages use
+# escaped log newlines, so matching that literal is unnecessarily brittle.
+success_marker = '''    } else if (SUCCEEDED(hr) && borderless_enabled) {\n'''
+enter_marker = '''    EnterCriticalSection(&vtable_lock);\n'''
+if text.count(success_marker) != 1:
+    raise SystemExit(
+        f"CreateDevice success branch: expected exactly one match, found {text.count(success_marker)}")
+start = text.index(success_marker)
+end = text.index(enter_marker, start)
+segment = text[start:end]
+window_call = '''        make_borderless_window(borderless_window);\n'''
+if segment.count(window_call) != 1:
+    raise SystemExit(
+        f"CreateDevice success make_borderless_window: expected exactly one match, found {segment.count(window_call)}")
+segment = segment.replace(
+    window_call,
+    window_call + '''        install_borderless_geometry_wndproc(borderless_window);\n''',
+    1,
 )
+text = text[:start] + segment + text[end:]
 
 RUNTIME.write_text(text, encoding="utf-8")
 print("Applied MVP2005 Modern final WndProc geometry guard v11")
