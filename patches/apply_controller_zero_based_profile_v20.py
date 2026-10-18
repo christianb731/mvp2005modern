@@ -19,30 +19,43 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 # L3 at slot 8 also fired the profile's "button 8" Start binding and paused, and
 # physical LB at slot 4 behaved like the profile's button-4 face/pitch action.
 #
-# In other words, the modern DirectInput path is consuming controller.cfg button
-# numbers as zero-based DI slots. Our configurator had been writing learned
-# one-based labels (1..10), while the v17 F8 bridge deliberately exposes the
-# canonical physical controls as slots 0..9. Make those two layers agree.
-#
-# Keep the UI/capture values human-friendly and one-based; only the Xbox-style
-# controller.cfg output is converted to zero-based values. Generic DirectInput is
-# untouched.
-old_values = '''    button_value(cross, sizeof(cross), m->cross);\n    button_value(circle, sizeof(circle), m->circle);\n    button_value(square, sizeof(square), m->square);\n    button_value(triangle, sizeof(triangle), m->triangle);\n    button_value(l1, sizeof(l1), m->l1);\n    button_value(r1, sizeof(r1), m->r1);\n    button_value(select, sizeof(select), m->select);\n    button_value(start, sizeof(start), m->start);\n    button_value(l3, sizeof(l3), m->l3);\n    button_value(r3, sizeof(r3), m->r3);\n'''
-new_values = '''    button_value(cross, sizeof(cross), generic_layout ? m->cross : m->cross - 1);\n    button_value(circle, sizeof(circle), generic_layout ? m->circle : m->circle - 1);\n    button_value(square, sizeof(square), generic_layout ? m->square : m->square - 1);\n    button_value(triangle, sizeof(triangle), generic_layout ? m->triangle : m->triangle - 1);\n    button_value(l1, sizeof(l1), generic_layout ? m->l1 : m->l1 - 1);\n    button_value(r1, sizeof(r1), generic_layout ? m->r1 : m->r1 - 1);\n    button_value(select, sizeof(select), generic_layout ? m->select : m->select - 1);\n    button_value(start, sizeof(start), generic_layout ? m->start : m->start - 1);\n    button_value(l3, sizeof(l3), generic_layout ? m->l3 : m->l3 - 1);\n    button_value(r3, sizeof(r3), generic_layout ? m->r3 : m->r3 - 1);\n'''
-controller = replace_once(controller, old_values, new_values, "logical button values")
-
-# v18's separate frontend face bank is runtime slots 10..13. Match those slot
-# numbers directly instead of the previous one-based 11..14 labels.
-for name, old_button, new_button in [
-    ("CROSS", 11, 10),
-    ("CIRCLE", 12, 11),
-    ("SQUARE", 13, 12),
-    ("TRIANGLE", 14, 13),
+# The modern DirectInput path is therefore consuming controller.cfg button numbers
+# as zero-based DI slots. v13 intentionally generated a stable one-based logical
+# profile (1..10), and v17's now-proven F8 mode shifts the synthesized XInput state
+# back to slots 0..9. Correct the profile side to match the state the game really
+# receives. The UI/capture values stay human-friendly; Generic DirectInput remains
+# unchanged.
+for variable, old_slot, new_slot in [
+    ("cross", 1, 0),
+    ("circle", 2, 1),
+    ("square", 3, 2),
+    ("triangle", 4, 3),
+    ("l1", 5, 4),
+    ("r1", 6, 5),
+    ("select", 7, 6),
+    ("start", 8, 7),
+    ("l3", 9, 8),
+    ("r3", 10, 9),
 ]:
     controller = replace_once(
         controller,
-        f'    write_binding(file, "VPAD_VIRTUAL_BUTTON_{name}", generic_layout ? {name.lower() if name != "CROSS" else "cross"} : "button {old_button}");\n',
-        f'    write_binding(file, "VPAD_VIRTUAL_BUTTON_{name}", generic_layout ? {name.lower() if name != "CROSS" else "cross"} : "button {new_button}");\n',
+        f'    button_value({variable}, sizeof({variable}), generic_layout ? m->{variable} : {old_slot});\n',
+        f'    button_value({variable}, sizeof({variable}), generic_layout ? m->{variable} : {new_slot});\n',
+        f"{variable} logical slot",
+    )
+
+# v18's separate frontend face bank is runtime slots 10..13. Match those slot
+# numbers directly instead of the previous one-based 11..14 labels.
+for name, variable, old_button, new_button in [
+    ("CROSS", "cross", 11, 10),
+    ("CIRCLE", "circle", 12, 11),
+    ("SQUARE", "square", 13, 12),
+    ("TRIANGLE", "triangle", 14, 13),
+]:
+    controller = replace_once(
+        controller,
+        f'    write_binding(file, "VPAD_VIRTUAL_BUTTON_{name}", generic_layout ? {variable} : "button {old_button}");\n',
+        f'    write_binding(file, "VPAD_VIRTUAL_BUTTON_{name}", generic_layout ? {variable} : "button {new_button}");\n',
         f"frontend {name} slot",
     )
 
