@@ -68,6 +68,7 @@ jobs:
           python3 ../patches/apply_skip_intro_diagnostic_v35.py
           python3 ../patches/apply_skip_intro_trace_v36.py
           python3 ../patches/apply_skip_intro_cache_v37.py
+          python3 ../patches/apply_skip_intro_ea_header_v38.py
           git diff --check
           git diff --stat
 
@@ -84,69 +85,75 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.37 - Safe Short-VP6 Skip Intro Preview
+          MVP Baseball 2005 Modern v0.38 - EA MVhd/SCHl Skip Intro Preview
 
-          WHAT CHANGED
-          ------------
-          v0.35 proved that pretending easports.vp6/mvpintro.vp6 are missing makes MVP
-          retry forever. v0.36 then proved both startup movies travel through a generic
-          worker-thread streaming path, making a code-level bypass too broad/risky.
+          WHAT WE LEARNED
+          ---------------
+          v0.37 safely rejected the user's intro files because MVP 2005 does not store
+          these .vp6 movies as RIFF/AVI. The files use Electronic Arts' native
+          Multimedia container: MVhd video metadata, SCHl/GSTR audio metadata, and
+          MV0K/MV0F VP6 frame chunks.
 
-          v0.37 uses a different method. Your installed intro movies remain untouched.
-          When Skip Intro is enabled, the runtime copies each requested startup VP6 into
-          MVP2005Modern.IntroCache beside the runtime, validates that the copy is a RIFF
-          AVI with a VP60 video stream, shortens the copy's AVI duration metadata to
-          approximately 120 ms, and redirects only easports.vp6 and mvpintro.vp6 to it.
+          v0.38 understands that real structure. The installed movies remain untouched.
+          On first open of easports.vp6 or mvpintro.vp6, the runtime copies the movie to
+          MVP2005Modern.IntroCache, validates the EA container, and changes only the
+          cached copy's declared duration metadata to about 120 ms:
 
-          If validation, cache creation, header editing, or cache opening fails for any
-          reason, MVP2005 Modern logs the failure and opens the original movie normally.
-          It never substitutes an empty/missing file and never edits the original movie.
+          - MVhd video frame count is reduced to the number of frames needed for ~120 ms.
+          - SCHl/GSTR audio sample count (element 0x85) is reduced to ~120 ms at the
+            file's declared/default sample rate.
+          - Width, height, frame rate, codec payload, keyframes, delta frames, audio
+            blocks and every compressed media chunk remain physically intact.
+
+          The runtime then redirects only those two startup movie opens to the cached
+          copy. If the MVhd/SCHl structure is not exactly as expected, cache creation or
+          patching fails closed and MVP opens the original movie normally.
 
           TEST
           ----
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.37 files.
-          2. Keep the working Large Address Aware and other settings as desired.
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.38 files.
+          2. Keep Large Address Aware and the other known-good settings as desired.
           3. Enable "Skip EA Sports / MVP intro videos".
           4. Launch MVP.
-          5. Report whether each intro is now nearly instantaneous, still full length,
-             freezes, crashes, or behaves differently.
-          6. Send MVP2005Modern-Intro.log after the test.
+          5. Report whether the EA Sports clip and MVP intro now end almost immediately,
+             still play full length, freeze, crash, or otherwise behave differently.
+          6. Send MVP2005Modern-Intro.log after the run.
 
           DIAGNOSTICS
           -----------
-          MVP2005Modern-Intro.log records:
-          - the source and cache paths and copy byte count;
-          - RIFF/AVI validation;
-          - avih microseconds/frame, total frames, stream count, width and height;
-          - each strh stream type, handler/FourCC, scale, rate, and old/new length;
-          - OpenDML dmlh frame count when present;
-          - VP60 validation and final cache-open result;
-          - explicit fallback to the original whenever anything is not as expected.
+          The intro log records, for each cached movie:
+          - MVhd size, 640x480 dimensions, old/new frame counts, maximum frame chunk,
+            rate/scale and calculated frame rate;
+          - SCHl audio revision, sample rate, old/new sample counts and durations;
+          - observed SCHl, MV0K and MV0F chunk counts in the inspected portion;
+          - whether the compressed payload was left unchanged;
+          - cache redirect or explicit fallback to the original.
 
           SAFETY / REVERSIBILITY
           ----------------------
-          Unchecking Skip Intro disables the redirect on the next launch. The cache can
-          also be deleted at any time; it is regenerated only from the user's installed
-          source movies. No movie content is bundled with MVP2005 Modern.
+          The user's installed .vp6 files are never edited. Unchecking Skip Intro makes
+          the next launch use the originals. MVP2005Modern.IntroCache can be deleted at
+          any time and is regenerated only from the user's own installed movie files.
 
           Existing SafeDiscShim, dgVoodoo, borderless, resolution, controller, setup,
           and Large Address Aware behavior is otherwise unchanged.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.37 component manifest
+          MVP2005 Modern v0.38 component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
           Controller baseline: v0.32
           Setup layer: v0.33
           Large Address Aware: v0.34
           Intro missing-file experiment: v0.35 (superseded; known to hang)
           Intro callsite trace: v0.36
-          Intro safe short-VP6 RIFF/AVI cache redirect: v0.37
+          Intro RIFF/AVI format probe: v0.37 (safe fallback; established actual EA container)
+          Intro EA MVhd/SCHl duration cache redirect: v0.38
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.37-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.38-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.37-x86
+          name: mvp2005modern-launcher-v0.38-x86
           path: dist/
           if-no-files-found: error
