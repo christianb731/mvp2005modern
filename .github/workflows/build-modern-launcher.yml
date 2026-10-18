@@ -28,6 +28,7 @@ on:
       - 'patches/apply_controller_empirical_rb_v24.py'
       - 'patches/apply_controller_complete_gameplay_v25.py'
       - 'patches/apply_controller_back_r2_alias_v26.py'
+      - 'patches/apply_controller_buttonized_modifiers_v27.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -79,6 +80,7 @@ jobs:
           python3 ../patches/apply_controller_empirical_rb_v24.py
           python3 ../patches/apply_controller_complete_gameplay_v25.py
           python3 ../patches/apply_controller_back_r2_alias_v26.py
+          python3 ../patches/apply_controller_buttonized_modifiers_v27.py
           git diff --check
           git diff --stat
 
@@ -95,75 +97,52 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Stable Contextual Controller Map v0.26
+          MVP Baseball 2005 Modern - Discrete Trigger Controls v0.27
+
+          STABLE CONTROLS ARE FROZEN
+          --------------------------
+          A/B/X/Y, RB pitch 5, Start, L3 and the working stick behavior are unchanged.
 
           WHAT CHANGED
           ------------
-          The v0.24 baseline remains frozen:
-            A/B/X/Y = correct face-button baseball actions
-            RB      = pitch 5
-            Start   = pause
-            L3      = no longer pauses
+          The v0.26 log proved LT + face and LB + face are reaching MVP together,
+          but MVP is not treating the synthesized trigger axis as L2/R2. v0.27
+          stops using the trigger axis for these gameplay modifiers.
 
-          v0.25 incorrectly routed Back/View to logical slot 2 as a manager-menu
-          shortcut. The user's test proved that slot produces BUNT in this context.
-          v0.26 permanently disables that shortcut.
+          The controller now exposes 12 logical buttons:
+            LT          -> button 11 -> MVP L2 / PICK modifier
+            RT or Back  -> button 12 -> MVP R2 / manager-alignment modifier
 
-          MVP's original shoulder/trigger controls are contextual. v0.26 keeps them
-          that way and makes Back/View a SECOND R2 input instead of a fake button:
+          The old trigger axis is neutralized during gameplay so there is only one
+          interpretation path.
 
-            LB / L1 = change fielder, advance all runners, quick-pickoff modifier,
-                      pitchout / intentional-action modifier
-            LT / L2 = normal PICK/pickoff modifier; also batting-box movement
-            RT / R2 = cutoff/relay; hold with D-pad for alignment and
-                      bullpen/dugout/manager controls
-            Back    = alias of RT/R2 during gameplay (same cutoff/menu functions)
+          LB is now also bound directly to relay/cutoff, matching the requested
+          modern layout and a known legacy MVP PC controller profile.
 
-          IMPORTANT: manager/alignment and PICK are not standalone tap actions.
-
-          PITCHING COMBOS
+          IMPORTANT SETUP
           ---------------
-          LT + B/Y/X = normal pickoff to first/second/third
-          LB + B/Y/X = quick pickoff to first/second/third
-          LB + A     = pitchout
-          LB + L3    = intentionally hit batter
-          LB + R3    = intentional walk
-          L3 + LB/RB = pitch history / toggle at-bats
-
-          MANAGER / ALIGNMENT
-          -------------------
-          Hold RT (or Back/View) + D-pad to access the R2 manager/alignment/
-          bullpen/dugout functions. Back alone is intentionally not a button action.
-
-          FIELDING / BASERUNNING
-          ----------------------
-          LB = change fielder
-          RT or Back = cutoff/relay
-          LB = advance all runners
-          RB = retreat all runners where MVP accepts the same logical pitch-5/R1 input
-          Right stick = dives/jumps/slides and manual baserunning returns/slides
-          D-pad = runner destinations and R2 menu/alignment choices
+          Open Controller Setup once and click Save to MVP. Do NOT recalibrate.
+          This one save is required because controller.cfg must change from the old
+          axis L2/R2 bindings to button 11/button 12 and advertise 12 buttons.
 
           TEST
           ----
           1. Replace BOTH MVP2005Modern.exe and mvp2005fix.dll.
-          2. Do NOT recalibrate and do NOT resave controller.cfg.
-          3. Confirm A/B/X/Y, RB, Start and L3 remain correct.
-          4. With a runner on base, HOLD LT and press B/Y/X for the PICK action.
-          5. HOLD RT + D-pad while pitching for manager/alignment/bullpen/dugout.
-             Back/View + D-pad should act identically as the modern shortcut.
-          6. In a cutoff situation, use RT (or Back/View) for cutoff/relay.
-          7. LB is intentionally NOT also mapped to cutoff because original L1/LB
-             already owns change-fielder, advance-all and pitching modifier actions.
+          2. Controller Setup -> Save to MVP ONCE. Do not recalibrate.
+          3. Verify A/B/X/Y and RB still work.
+          4. With a runner on base: LT + B/Y/X for normal PICK.
+          5. While pitching: hold Back (or RT) + D-pad for manager/bullpen/alignment.
+          6. During a relay/cutoff situation: press LB.
 
-          Compatibility/runtime behavior outside controller handling remains on the
-          verified RC1 path. Intro-video skipping remains disabled.
+          The diagnostic log remains enabled. A working v0.27 profile should show
+          number_of_buttons=12, L2=button 11, R2=button 12, and gameplay LT/RT as
+          OUT btn=[11]/[12] instead of trigger-axis motion.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.26-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.27-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.26-x86
+          name: mvp2005modern-launcher-v0.27-x86
           path: dist/
           if-no-files-found: error
