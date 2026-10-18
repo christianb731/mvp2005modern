@@ -38,6 +38,7 @@ on:
       - 'patches/apply_setup_cleanup_v33_fix.py'
       - 'patches/apply_large_address_aware_v34.py'
       - 'patches/apply_large_address_aware_v34_fix.py'
+      - 'patches/apply_skip_intro_diagnostic_v35.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -99,6 +100,7 @@ jobs:
           python3 ../patches/apply_setup_cleanup_v33_fix.py
           python3 ../patches/apply_large_address_aware_v34.py
           python3 ../patches/apply_large_address_aware_v34_fix.py
+          python3 ../patches/apply_skip_intro_diagnostic_v35.py
           git diff --check
           git diff --stat
 
@@ -115,68 +117,63 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.34 - Large Address Aware Preview
+          MVP Baseball 2005 Modern v0.35 - Diagnostic Skip Intro Preview
 
           QUICK START
           -----------
           1. Keep MVP2005Modern.exe and mvp2005fix.dll together in a normal writable
              folder such as Documents or a dedicated Games tools folder.
           2. Run MVP2005Modern.exe.
-          3. The launcher will reuse a remembered MVP installation when possible.
-             Otherwise browse to your original mvp2005.exe.
-          4. Click Verify / Repair once. The launcher verifies the compatibility
-             stack and installs/repairs only what is needed.
-          5. Enable "4 GB / Large Address Aware" for high-resolution texture/mod
-             headroom, choose resolution, and launch the game.
+          3. Select/reuse your original mvp2005.exe.
+          4. Leave the working v0.34 settings as desired, including Large Address Aware.
+          5. Enable "Skip EA Sports / MVP intro videos" and launch the game.
+
+          SKIP INTRO TEST
+          ---------------
+          This preview does NOT rename, replace, truncate, or delete any VP6 movie.
+          The original easports.vp6 and mvpintro.vp6 files remain untouched.
+
+          When Skip Intro is enabled, the injected runtime first records the result of
+          the previously tested internal ENABLE_FRONTEND_MOVIES patch. It also watches
+          the existing CreateFileA/CreateFileW runtime hooks. Exact attempts to open
+          easports.vp6 or mvpintro.vp6 are logged and returned as ERROR_FILE_NOT_FOUND.
+          The goal is to let MVP take its normal missing-optional-movie path instead of
+          feeding the VP6 decoder an invalid/empty movie.
+
+          A dedicated MVP2005Modern-Intro.log is created next to the launcher/runtime.
+          It records:
+          - whether the old internal movie-setting signature was found and patched;
+          - each exact EA Sports/MVP intro VP6 open request;
+          - whether the request used CreateFileA or CreateFileW;
+          - access/share/disposition parameters;
+          - the calling module and offset/RVA;
+          - the explicit ERROR_FILE_NOT_FOUND interception.
+
+          If the game still plays the intros, the log tells us that the movie path is
+          bypassing these Win32 file opens. If the game reacts badly to a missing file,
+          the caller offset gives us a much narrower place to inspect/patch next.
 
           LARGE ADDRESS AWARE
           -------------------
-          The checkbox changes only the standard PE32 IMAGE_FILE_LARGE_ADDRESS_AWARE
-          flag in your own mvp2005.exe. The launcher validates the PE header before
-          writing and re-reads it afterward. The original executable is backed up once
-          as MVP2005Modern.Backup\executable\mvp2005.exe.pre-laa.bak before the first
-          change. Unchecking the option clears only that flag.
+          The working v0.34 LAA implementation remains unchanged. It validates the PE32
+          header, backs up mvp2005.exe once, toggles only IMAGE_FILE_LARGE_ADDRESS_AWARE,
+          and records launcher/runtime verification in MVP2005Modern-LAA.log.
 
-          The launcher does not bundle or execute a third-party 4 GB patch utility.
-          If the game folder requires administrator access, only the narrowly scoped
-          PE-header worker is elevated rather than the entire launcher.
+          CONTROLLER / COMPATIBILITY
+          --------------------------
+          Controller behavior remains frozen at the working v0.32 persistent learner.
+          SafeDiscShim 0.9.0, dgVoodoo2 2.87.5, borderless behavior, resolution fixes,
+          and the v0.33 permissions-aware Verify / Repair path are unchanged.
+          Controller diagnostic logging remains OFF unless explicitly enabled with
+          [ControllerDebug] Logging=1 in mvp2005fix.ini.
 
-          MVP2005Modern-LAA.log records the original/final PE characteristics, file
-          size, PE offsets, SHA-256 values, verification result, and a runtime line from
-          the injected game process showing whether LAA survived the SafeDisc launch
-          path and the maximum user-mode application address Windows assigned it.
-
-          WHAT VERIFY / REPAIR DOES
-          -------------------------
-          SafeDiscShim v0.9.0:
-          - downloaded only from the pinned official release URL;
-          - SHA-256 verified before execution;
-          - installed through its normal Windows UAC prompt;
-          - the original MVP Baseball 2005 disc/media verification remains in use.
-
-          dgVoodoo2 v2.87.5:
-          - official ZIP is SHA-256 verified;
-          - x86 D3D8.dll, DDraw.dll and D3DImm.dll are installed beside mvp2005.exe;
-          - existing compatibility files are backed up once under
-            MVP2005Modern.Backup\compatibility;
-          - the validated MVP-specific borderless profile is applied.
-
-          CONTROLLER
-          ----------
-          The current v0.32 controller behavior is intentionally frozen. Learned
-          controller mappings remain in mvp2005fix.ini and continue to load normally.
-          Controller diagnostic logging is OFF during normal play. To temporarily
-          enable it, add [ControllerDebug] Logging=1 to mvp2005fix.ini.
-
-          BACKUPS / SAFETY
-          ----------------
-          MVP2005 Modern does not distribute or replace mvp2005.exe and does not ship
-          game assets. Existing dgVoodoo compatibility files and the pre-LAA executable
-          are backed up before the launcher owns those changes. Intro-video modification
-          remains disabled pending the next diagnostic pass.
+          SAFETY
+          ------
+          Unchecking Skip Intro restores normal movie access immediately on the next
+          launch. No game assets are modified by this feature.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.34 component manifest
+          MVP2005 Modern v0.35 component manifest
 
           upstream mvp2005fix commit:
           1c0dae9b030a8fb66648655c8d14043af1ead676
@@ -191,12 +188,13 @@ jobs:
           Controller baseline: v0.32 persistent live learner / empirical mapping
           Setup layer: v0.33 permissions-aware Verify / Repair
           Executable option: v0.34 reversible Large Address Aware PE32 flag + diagnostics
+          Intro experiment: v0.35 runtime missing-file interception + dedicated diagnostics
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.34-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.35-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.34-x86
+          name: mvp2005modern-launcher-v0.35-x86
           path: dist/
           if-no-files-found: error
