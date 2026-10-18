@@ -76,6 +76,7 @@ jobs:
           python3 ../patches/apply_menu_scale_probe_v43.py
           python3 ../patches/apply_menu_scale_safe_v44.py
           python3 ../patches/apply_menu_scale_aspect_v45.py
+          python3 ../patches/apply_menu_scale_widescreen_v46.py
           git diff --check
           git diff --stat
 
@@ -92,53 +93,64 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.45 - Aspect-Correct Frontend Scaling
+          MVP Baseball 2005 Modern v0.46 - Hybrid 16:9 Frontend Scaling
 
-          WHAT CHANGED
-          ------------
-          v0.44 proved MVP's frontend is rendered as live 800x600 2D geometry into
-          the HD backbuffer. Stretching that 4:3 viewport across 16:9 worked but
-          distorted the artwork horizontally.
+          WHAT v0.45 TAUGHT US
+          --------------------
+          v0.45 correctly created a centered 1920x1440 4:3 viewport at 2560x1440,
+          and its mouse transform matched that viewport. The screenshot showed that
+          several menu labels were clipped at the left viewport boundary, however.
+          That means some frontend draws do not tolerate a non-zero D3D viewport
+          origin even though the main background/panel geometry does.
 
-          v0.45 keeps the HD frontend backbuffer, but fits the logical 800x600 menu
-          into the largest centered 4:3 viewport that fits the configured output.
+          v0.46 therefore keeps the FRONTEND D3D viewport at the complete configured
+          output, starting at 0,0, and performs aspect work in the verified 800x600
+          orthographic matrix instead.
 
-          At 2560x1440 the expected frontend viewport is:
-              X=320, Y=0, Width=1920, Height=1440
+          HYBRID 16:9 EXPERIMENT
+          ----------------------
+          At 2560x1440, v0.46 classifies exact 800x600 frontend orthographic matrix
+          submissions using the shader handle observed in the v0.44/v0.45 logs:
 
-          This is a uniform 2.4x scale in both axes. Original menu proportions are
-          preserved; the unused left/right areas remain outside the menu viewport.
+          UI_FIT (shader 0x00000005)
+          - keeps the original 800x600 UI at correct proportions;
+          - maps it to an effective centered 1920x1440 region;
+          - does this through the projection matrix, not a clipped viewport.
 
-          MOUSE ALIGNMENT
-          ---------------
-          Frontend mouse input now uses the exact same centered aspect-fit transform.
-          At 2560x1440, physical X=320..2239 maps to logical X=0..799 and physical
-          Y=0..1439 maps to logical Y=0..599. Cursor positions in the side bars are
-          clamped to the nearest logical menu edge.
+          BACKGROUND_COVER (other 800x600 2D shaders)
+          - fills the complete 2560x1440 output without horizontal stretching;
+          - uniformly scales 800x600 to 2560x1920;
+          - center-crops 240 physical pixels from the top and bottom (75 logical
+            pixels each) to make a 4:3 source cover a 16:9 screen.
 
-          Gameplay retains the existing raw-HD mouse and rendering path. The verified
-          gameplay->frontend timeout transition remains in place so returning from a
-          game restores the centered frontend mouse transform.
+          This is intentionally a first empirical classification. The detailed log
+          records the shader handle and exact before/after matrix for every early
+          transformed layer so we can refine which layers are UI versus background.
+
+          MOUSE
+          -----
+          The frontend mouse continues using the known 800x600 UI fit region because
+          UI hit boxes remain in the original logical coordinate system. Gameplay
+          keeps the existing raw-HD mouse path.
 
           DIAGNOSTICS
           -----------
-          MVP2005Modern-MenuScale.log remains intentionally verbose for this preview.
-          Look for:
-          - HOOKS V45 ... aspect_fit=1 mouse_fit=1
-          - CREATEDEVICE FRONTEND BACKBUFFER 800x600 -> configured HD output
-          - SETVIEWPORT ... out=320,0 1920x1440 at 2560x1440
+          MVP2005Modern-MenuScale.log remains intentionally verbose. Look for:
+          - HOOKS V46 ... full_viewport=1 ui_fit_matrix=1 background_cover=1
+          - SETVIEWPORT ... out=0,0 2560x1440
+          - WIDE MATRIX ... mode=UI_FIT shader=0x00000005
+          - WIDE MATRIX ... mode=BACKGROUND_COVER shader=...
           - MOUSE FRONTEND ... viewport=320,0 1920x1440
-          - GAMEPLAY SetViewport calls remaining unmodified
-          - PHASE frontend mouse transform restored after gameplay timeout
 
           TEST SEQUENCE
           -------------
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.45 files.
-          2. Launch to the main menu and verify correct proportions and centered 4:3 layout.
-          3. Move/click across the menu and verify hit testing lines up visually.
-          4. Enter an actual game and verify gameplay resolution and mouse behavior are unchanged.
-          5. Exit back to the frontend and verify menu rendering/mouse alignment recover.
-          6. Send MVP2005Modern-MenuScale.log plus a screenshot if anything looks unusual.
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.46 files.
+          2. Launch to the main menu.
+          3. Check whether the previously clipped menu text is now completely visible.
+          4. Check whether the background fills the 16:9 screen without looking wide.
+          5. Check mouse alignment over multiple menu choices.
+          6. If practical, enter gameplay and return to the frontend.
+          7. Send MVP2005Modern-MenuScale.log and a screenshot.
 
           To disable only menu scaling while retaining diagnostics:
 
@@ -149,18 +161,19 @@ jobs:
           v0.42 Skip Intro and all other production behavior remain unchanged.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.45 diagnostic component manifest
+          MVP2005 Modern v0.46 diagnostic component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
           Production baseline through Skip Intro: v0.42
           v0.43 broad D3D probe: superseded
-          v0.44 safe HD frontend viewport proof
-          v0.45 centered aspect-correct frontend viewport + matching mouse transform
+          v0.44 full-HD frontend viewport proof
+          v0.45 centered 4:3 viewport proof; exposed non-zero-origin UI clipping
+          v0.46 full viewport + UI-fit/background-cover orthographic matrix experiment
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.45-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.46-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.45-x86
+          name: mvp2005modern-launcher-v0.46-x86
           path: dist/
           if-no-files-found: error
