@@ -20,6 +20,7 @@ on:
       - 'patches/apply_controller_xinput_bridge_v16.py'
       - 'patches/apply_controller_full_diagnostics_v17.py'
       - 'patches/apply_controller_frontend_gameplay_split_v18.py'
+      - 'patches/apply_controller_x_quarantine_v19.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -63,6 +64,7 @@ jobs:
           python3 ../patches/apply_controller_xinput_bridge_v16.py
           python3 ../patches/apply_controller_full_diagnostics_v17.py
           python3 ../patches/apply_controller_frontend_gameplay_split_v18.py
+          python3 ../patches/apply_controller_x_quarantine_v19.py
           git diff --check
           git diff --stat
 
@@ -79,75 +81,44 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.18
+          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.19
 
-          WHAT v0.17 PROVED
-          -----------------
-          The diagnostic run finally removed several unknowns:
+          v0.18 proved the remaining X problem is not the virtual Square binding.
+          During gameplay, physical X was the only reported controller input and
+          MVP still opened the manager menu. This exact X360-era symptom is also
+          documented historically for MVP 2005.
 
-            - MVP reads the expected Documents\MVP Baseball 2005\controller.cfg.
-            - The profile in that file is the Flydigi Player 1 profile.
-            - Ctrl+F8 / XINPUT_ZERO_BASED makes physical B become only DI slot 1,
-              with no trigger, Esc, or Enter input, and B throws to first correctly.
-            - In the same F8 mode, physical X becomes only DI slot 2, again with
-              neutral triggers and no keyboard input, but MVP opens a menu.
-            - controller.cfg maps button 2 to Throw First and button 3 to Throw
-              Third, while it also maps VPAD_VIRTUAL_BUTTON_SQUARE to button 3.
+          v0.19 quarantines gameplay X away from legacy DI slot 2:
+            - A/B/Y keep their working zero-based gameplay slots.
+            - Frontend A/B/X/Y still use the separate v0.18 menu bank.
+            - During gameplay only, physical X is moved to DI slot 14.
+            - X baseball actions (pitch 3, pickoff/throw third, runner-third select)
+              are generated as controller.cfg button 15.
+            - The unsafe gameplay slot 2 is cleared while X is held.
 
-          That means the remaining face-button problem is no longer an input API
-          mystery. The same logical slot is being asked to serve two different MVP
-          systems: frontend/menu virtual buttons and baseball gameplay actions.
-
-          v0.18 SEPARATES THOSE TWO BANKS
-          -------------------------------
-          During gameplay:
-            A/B/X/Y -> DI slots 0/1/2/3
-            controller.cfg gameplay actions remain buttons 1/2/3/4
-
-          During frontend/menu screens:
-            A/B/X/Y -> DI slots 10/11/12/13
-            VPAD_VIRTUAL_BUTTON_CROSS/CIRCLE/SQUARE/TRIANGLE are generated as
-            buttons 11/12/13/14
-
-          This uses the already-proven RC1 gameplay phase detector. It prevents X's
-          gameplay Throw Third slot from simultaneously firing the virtual Square
-          frontend command.
-
-          v0.18 also fixes the reversed synthesized stick axes from v0.16 by using
-          the sign convention demonstrated by v0.17's simultaneous raw DI/XInput
-          trace.
-
-          Diagnostics remain enabled. Ctrl+F4 toggles the face-bank split at
-          runtime if you want an immediate A/B comparison without rebuilding.
-          The older F5-F10 diagnostic modes are still present. v0.18 starts in the
-          now-proven F8 / zero-based mode automatically.
+          The full v0.17/v0.18 diagnostic logger remains enabled. A gameplay X press
+          should therefore appear as OUT btn=[14], not OUT btn=[2].
 
           TEST
           ----
-          1. Open Controller Setup once and click Save to MVP. Do not recalibrate.
-             This rewrites the profile with the new separate frontend face bank.
-          2. Launch the game normally.
-          3. Verify menus can still be navigated with A/B/X/Y.
-          4. In gameplay test:
-               B = throw first
-               X = throw third (must NOT open the menu)
-               Y = throw second
-               A = throw home
-          5. Check left-stick directions.
-          6. Then test LB/RB/L3/R3/LT/RT in their relevant contexts.
-
-          If anything remains wrong, upload mvp2005controller_diagnostic.log. The
-          full v0.17 instrumentation is intentionally still present, so another
-          special diagnostic build should not be necessary.
+          1. Open Controller Setup and click Save to MVP once. Do not recalibrate.
+             This writes the new button-15 X action bindings.
+          2. Launch normally.
+          3. Test B -> first, X -> third, Y -> second, A -> home.
+          4. If X still opens the manager menu, upload the diagnostic log; that
+             would prove the menu command is being generated above DirectInput's
+             logical slot layer and we can stop touching controller.cfg entirely.
+          5. Also test LB/RB/L3/R3/LT/RT so the same log can cover any remaining
+             controller issues in this one run.
 
           Compatibility/runtime behavior outside controller handling remains on the
           verified RC1 path. Intro-video skipping remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.18-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.19-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.18-x86
+          name: mvp2005modern-launcher-v0.19-x86
           path: dist/
           if-no-files-found: error
