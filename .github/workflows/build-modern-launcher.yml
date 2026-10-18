@@ -26,6 +26,7 @@ on:
       - 'patches/apply_controller_buffered_input_v22.py'
       - 'patches/apply_controller_empirical_hybrid_v23.py'
       - 'patches/apply_controller_empirical_rb_v24.py'
+      - 'patches/apply_controller_complete_gameplay_v25.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -75,6 +76,7 @@ jobs:
           python3 ../patches/apply_controller_buffered_input_v22.py
           python3 ../patches/apply_controller_empirical_hybrid_v23.py
           python3 ../patches/apply_controller_empirical_rb_v24.py
+          python3 ../patches/apply_controller_complete_gameplay_v25.py
           git diff --check
           git diff --stat
 
@@ -91,53 +93,66 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.24
+          MVP Baseball 2005 Modern - Complete Controller Gameplay Map v0.25
 
-          WHAT CHANGED
-          ------------
-          v0.23 produced the first stable gameplay face-button layout:
-            A -> home
-            B -> first
-            X -> third
-            Y -> second
-          Start also pauses correctly and L3 no longer pauses.
+          STABLE CONTROLS - DO NOT RECALIBRATE
+          -------------------------------------
+          v0.23/v0.24 established a stable empirical layout. v0.25 keeps every
+          confirmed working control unchanged and fills in the remaining gameplay
+          functions using the original MVP control scheme plus the slots this game
+          has actually demonstrated on this system.
 
-          v0.24 leaves all of that untouched.
+          PRIMARY CONTROLS
+          ----------------
+          A     = pitch 1 / throw home / normal swing
+          B     = pitch 2 / throw first
+          X     = pitch 3 / throw third
+          Y     = pitch 4 / throw second
+          RB    = pitch 5
+          Start = pause
 
-          Earlier testing directly showed that gameplay slot 7 fires pitch 5 when
-          Back/View occupies that slot. v0.23 already suppresses physical Back during
-          gameplay, so slot 7 is free. v0.24 routes physical RB to that empirically
-          proven pitch-5 slot:
+          REMAINING GAMEPLAY CONTROLS
+          ---------------------------
+          Back/View = manager / bullpen / dugout menu shortcut
+                      (uses the empirically-proven manager-menu slot)
+          LT        = PICK / normal pickoff modifier; hold LT + base button
+          LB        = quick pickoff modifier; hold LB + base button
+                      also field-switch / advance-all-runners as appropriate
+          RT        = relay/cutoff throw and original R2 alignment/menu modifier
+          L3        = pitch history; LB + L3 intentionally hits batter
+          R3        = bunt; LB + R3 intentional walk
+          D-pad     = menu/alignment choices and runner destinations
+          Right stick = fielding dives/jumps/slides and baserunning return/slides
 
-            RB -> gameplay slot 7 -> pitch 5
-
-          Physical Back remains suppressed during gameplay and works normally in the
-          frontend. LB is unchanged.
-
-          NOTE ON INTENTIONAL HIT BATTER
-          ------------------------------
-          The loaded controller.cfg assigns intentional hit batter to button 9/L3,
-          not LB. The v0.23 diagnostic log also captured L3 (slot 9) pressed at the
-          same time as LB during the sequence where the hit-batter behavior was seen.
-          For that reason this build does NOT change LB yet.
+          OTHER ORIGINAL MVP COMBOS
+          -------------------------
+          LB + A = pitchout
+          LB + B/Y/X = quick pickoff to first/second/third
+          LT + B/Y/X = normal pickoff to first/second/third
+          LB + L3 = intentional hit batter
+          LB + R3 = intentional walk
 
           TEST
           ----
           1. Replace BOTH MVP2005Modern.exe and mvp2005fix.dll.
-          2. Do not recalibrate or resave controller.cfg.
-          3. Confirm A/B/X/Y and Start still work exactly as in v0.23.
-          4. While pitching, verify RB selects/throws the fifth pitch.
-          5. Check LB once and twice. If an intentional HBP happens, note whether L3
-             was clicked at the same time; the diagnostic log records both controls.
+          2. Do NOT recalibrate and do NOT resave controller.cfg.
+          3. Confirm A/B/X/Y, RB, Start and L3 remain correct.
+          4. While pitching, press Back/View and verify the manager/bullpen/dugout
+             menu opens.
+          5. With a runner on base, hold LT and press the base button to test the
+             on-screen PICK function. Also test LB + base for the quick pickoff.
+          6. Test RT on a relay/cutoff situation if convenient, plus R3 and the
+             right stick. Upload the diagnostic log only if one of these remaining
+             controls behaves differently.
 
           Compatibility/runtime behavior outside controller handling remains on the
           verified RC1 path. Intro-video skipping remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.24-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.25-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.24-x86
+          name: mvp2005modern-launcher-v0.25-x86
           path: dist/
           if-no-files-found: error
