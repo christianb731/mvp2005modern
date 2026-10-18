@@ -19,6 +19,7 @@ on:
       - 'patches/apply_controller_canonical_xbox_v15.py'
       - 'patches/apply_controller_xinput_bridge_v16.py'
       - 'patches/apply_controller_full_diagnostics_v17.py'
+      - 'patches/apply_controller_frontend_gameplay_split_v18.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -61,6 +62,7 @@ jobs:
           python3 ../patches/apply_controller_canonical_xbox_v15.py
           python3 ../patches/apply_controller_xinput_bridge_v16.py
           python3 ../patches/apply_controller_full_diagnostics_v17.py
+          python3 ../patches/apply_controller_frontend_gameplay_split_v18.py
           git diff --check
           git diff --stat
 
@@ -77,86 +79,75 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Controller Diagnostic Build v0.17
+          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.18
 
-          ONE-PASS CONTROLLER DIAGNOSTICS
-          --------------------------------
-          This build deliberately collects much more evidence than earlier builds so
-          controller debugging should not require another compile for each theory.
+          WHAT v0.17 PROVED
+          -----------------
+          The diagnostic run finally removed several unknowns:
 
-          It records to:
-            mvp2005controller_diagnostic.log
-          beside mvp2005fix.dll / MVP2005Modern.exe.
+            - MVP reads the expected Documents\MVP Baseball 2005\controller.cfg.
+            - The profile in that file is the Flydigi Player 1 profile.
+            - Ctrl+F8 / XINPUT_ZERO_BASED makes physical B become only DI slot 1,
+              with no trigger, Esc, or Enter input, and B throws to first correctly.
+            - In the same F8 mode, physical X becomes only DI slot 2, again with
+              neutral triggers and no keyboard input, but MVP opens a menu.
+            - controller.cfg maps button 2 to Throw First and button 3 to Throw
+              Third, while it also maps VPAD_VIRTUAL_BUTTON_SQUARE to button 3.
 
-          What the log captures:
-            - Every controller.cfg path MVP actually opens.
-            - Up to 32 KiB of the exact controller.cfg bytes MVP reads.
-            - Every DirectInput controller device MVP creates and its GUID.
-            - Raw 80-byte DirectInput state on every input transition.
-            - XInput state on every transition (buttons, triggers, both sticks).
-            - The final DIJOYSTATE handed to MVP after runtime translation.
-            - All six axes + POV before and after translation.
-            - The GetDeviceState caller address.
-            - Whether Esc or Enter is simultaneously down when a controller event fires.
-            - Runtime mode changes and explicit user markers.
+          That means the remaining face-button problem is no longer an input API
+          mystery. The same logical slot is being asked to serve two different MVP
+          systems: frontend/menu virtual buttons and baseball gameplay actions.
 
-          Six translation modes are built into the SAME executable:
-            Ctrl+F5 = raw DirectInput, no remap
-            Ctrl+F6 = v13 button remap + raw physical axes
-                      (this is the mode where face buttons/Start previously worked)
-            Ctrl+F7 = native XInput -> one-based MVP buttons (v16 behavior)
-            Ctrl+F8 = native XInput -> zero-based logical buttons
-            Ctrl+F9 = v13 button remap + trigger axis forced neutral
-            Ctrl+F10 = native XInput one-based + trigger axis forced neutral
+          v0.18 SEPARATES THOSE TWO BANKS
+          -------------------------------
+          During gameplay:
+            A/B/X/Y -> DI slots 0/1/2/3
+            controller.cfg gameplay actions remain buttons 1/2/3/4
 
-          The build starts in Ctrl+F6 mode automatically.
+          During frontend/menu screens:
+            A/B/X/Y -> DI slots 10/11/12/13
+            VPAD_VIRTUAL_BUTTON_CROSS/CIRCLE/SQUARE/TRIANGLE are generated as
+            buttons 11/12/13/14
 
-          Pure B-slot test, also without rebuilding:
-            Ctrl+1 = physical B sends ONLY logical slot 1
-            Ctrl+2 = physical B sends ONLY logical slot 2
-            ...
-            Ctrl+9 = physical B sends ONLY logical slot 9
-            Ctrl+0 = physical B sends ONLY logical slot 10
-            Ctrl+F11 = clear the B-slot override
+          This uses the already-proven RC1 gameplay phase detector. It prevents X's
+          gameplay Throw Third slot from simultaneously firing the virtual Square
+          frontend command.
 
-          During a B-slot override, the trigger axis is forced neutral and every
-          other logical button is suppressed while B is held. This directly tells
-          us which slot MVP itself treats as Throw First, independently of XInput,
-          DirectInput numbering, trigger state, and the normal remapper.
+          v0.18 also fixes the reversed synthesized stick axes from v0.16 by using
+          the sign convention demonstrated by v0.17's simultaneous raw DI/XInput
+          trace.
 
-          Ctrl+F12 writes a USER MARKER line to the diagnostic log.
+          Diagnostics remain enabled. Ctrl+F4 toggles the face-bank split at
+          runtime if you want an immediate A/B comparison without rebuilding.
+          The older F5-F10 diagnostic modes are still present. v0.18 starts in the
+          now-proven F8 / zero-based mode automatically.
 
-          ONE TEST SESSION
-          ----------------
-          1. Keep the existing controller.cfg and mvp2005fix.ini. Do not recalibrate.
-          2. Launch through MVP2005Modern.exe and get into a fielding situation.
-          3. In the default mode, press B once. Close any menu it opens.
-          4. Press Ctrl+F9, release both keys, then press B once.
-             This isolates false LT/RT activation.
-          5. Press Ctrl+F7, release, press B once.
-          6. Press Ctrl+F10, release, press B once.
-          7. Press Ctrl+F8, release, press B once.
-          8. Press Ctrl+F5, release, press B once.
-          9. Press Ctrl+F6 to return to the v13-style mode.
-          10. Move the LEFT stick fully right, then fully left, then center it.
-          11. Press/release LB, RB, L3, R3, LT, RT one at a time.
-          12. Optional but extremely useful if B has still never thrown to first:
-              run Ctrl+1 + B, Ctrl+2 + B, ... Ctrl+0 + B and note which numbered
-              slot (if any) throws to first. You do not need to restart the game.
-          13. Quit and upload mvp2005controller_diagnostic.log.
+          TEST
+          ----
+          1. Open Controller Setup once and click Save to MVP. Do not recalibrate.
+             This rewrites the profile with the new separate frontend face bank.
+          2. Launch the game normally.
+          3. Verify menus can still be navigated with A/B/X/Y.
+          4. In gameplay test:
+               B = throw first
+               X = throw third (must NOT open the menu)
+               Y = throw second
+               A = throw home
+          5. Check left-stick directions.
+          6. Then test LB/RB/L3/R3/LT/RT in their relevant contexts.
 
-          The purpose of v0.17 is evidence, not another guessed mapping. The next
-          controller change should be based on this single log plus the observed
-          B-slot result.
+          If anything remains wrong, upload mvp2005controller_diagnostic.log. The
+          full v0.17 instrumentation is intentionally still present, so another
+          special diagnostic build should not be necessary.
 
-          Compatibility/runtime behavior outside controller diagnostics remains on
-          the verified RC1 path. Intro-video skipping remains disabled.
+          Compatibility/runtime behavior outside controller handling remains on the
+          verified RC1 path. Intro-video skipping remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.17-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.18-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.17-x86
+          name: mvp2005modern-launcher-v0.18-x86
           path: dist/
           if-no-files-found: error
