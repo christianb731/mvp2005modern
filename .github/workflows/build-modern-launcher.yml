@@ -23,6 +23,7 @@ on:
       - 'patches/apply_controller_x_quarantine_v19.py'
       - 'patches/apply_controller_zero_based_profile_v20.py'
       - 'patches/apply_controller_one_based_final_v21.py'
+      - 'patches/apply_controller_buffered_input_v22.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -69,6 +70,7 @@ jobs:
           python3 ../patches/apply_controller_x_quarantine_v19.py
           python3 ../patches/apply_controller_zero_based_profile_v20.py
           python3 ../patches/apply_controller_one_based_final_v21.py
+          python3 ../patches/apply_controller_buffered_input_v22.py
           git diff --check
           git diff --stat
 
@@ -85,55 +87,53 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.21
+          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.22
 
-          WHY v0.21 RETURNS TO ONE-BASED
-          --------------------------------
-          The v0.20 test reproduced the classic MVP 2005 modern-controller offset:
-          physical Y (zero-based slot 3) acted like X/Square and threw to third,
-          while physical L3 (slot 8) acted like Start and paused. That is the exact
-          pattern historically seen when MVP's one-based controller profile is fed
-          an unshifted zero-based XInput/DirectInput button array.
+          WHAT v0.22 FIXES
+          ----------------
+          The controller work was remapping IDirectInputDevice::GetDeviceState, but
+          MVP 2005 also consumes the legacy buffered GetDeviceData event stream.
+          Our old v0.10 diagnostics only began seeing the user's real button presses
+          after GetDeviceData was hooked; that hook was not carried into the later
+          production remapper.
 
-          Earlier v0.13 had already shown the inverse: shifting modern XInput buttons
-          into logical slots 1..10 made the face buttons and Start work correctly.
+          This explains the repeated impossible-looking behavior: the diagnostic OUT
+          state could contain only the intended logical button while MVP still saw an
+          unmodified raw button event through the second DirectInput API and opened a
+          menu, paused, or fired pitch 5 from the wrong physical control.
 
-          v0.21 therefore uses the canonical, long-established MVP Xbox layout end
-          to end:
-            A/B/X/Y -> logical slots/buttons 1/2/3/4
+          v0.22 keeps the v0.21 canonical profile and native XInput state synthesis,
+          but now normalizes BOTH input paths:
+            - GetDeviceState: canonical logical controller state
+            - GetDeviceData: buffered button offsets remapped to the same logical slots
+
+          Default F7 mapping remains:
+            A/B/X/Y -> buttons 1/2/3/4
             LB/RB -> 5/6
             View/Start -> 7/8
             L3/R3 -> 9/10
-            LT/RT -> axis-3 / axis+3
 
-          The v18 corrected stick-axis signs are retained. The v17 diagnostics are
-          also retained. v0.21 starts in F7 / XINPUT_ONE_BASED mode. Ctrl+F8 is still
-          available as an immediate zero-based comparison if needed, without another
-          build.
+          The diagnostic log now records BUFFERED BUTTON lines showing raw_slot and
+          out_slot, so a single run can verify the second path is actually corrected.
 
           TEST
           ----
           1. Replace BOTH MVP2005Modern.exe and mvp2005fix.dll.
-          2. Open Controller Setup and click Save to MVP once. Do not recalibrate.
-          3. Test in one fielding sequence:
-               A = home
-               B = first
-               X = third
-               Y = second
-               Start = pause
-               L3 must NOT pause
-          4. Then test LB/RB/R3/LT/RT in their relevant contexts.
-          5. If any of those six core checks fail, press Ctrl+F8 once and repeat only
-             the failed control. The diagnostic log will record the mode change.
+          2. Controller Setup -> Save to MVP once. Do not recalibrate.
+          3. Stay in the default F7 mode; do NOT switch to F8 for the first test.
+          4. Test A/B/X/Y, Start, Back/View, L3/R3, LB/RB and LT/RT.
+          5. If anything is still wrong, upload mvp2005controller_diagnostic.log.
+             It should identify itself as buffered-path normalization v22 and contain
+             BUFFERED BUTTON entries for button presses.
 
           Compatibility/runtime behavior outside controller handling remains on the
           verified RC1 path. Intro-video skipping remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.21-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.22-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.21-x86
+          name: mvp2005modern-launcher-v0.22-x86
           path: dist/
           if-no-files-found: error
