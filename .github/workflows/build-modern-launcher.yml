@@ -75,6 +75,7 @@ jobs:
           python3 ../patches/apply_skip_intro_production_v42.py
           python3 ../patches/apply_menu_scale_probe_v43.py
           python3 ../patches/apply_menu_scale_safe_v44.py
+          python3 ../patches/apply_menu_scale_aspect_v45.py
           git diff --check
           git diff --stat
 
@@ -91,48 +92,55 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.44 - Safe Frontend Menu Scaling Probe
+          MVP Baseball 2005 Modern v0.45 - Aspect-Correct Frontend Scaling
 
-          WHY v0.44 EXISTS
-          ----------------
-          v0.43 crashed immediately after installing its large D3D diagnostic hook set.
-          Its first Present/viewport diagnostics performed nested COM queries before
-          writing a call-entry line, so the failing query could not be isolated.
+          WHAT CHANGED
+          ------------
+          v0.44 proved MVP's frontend is rendered as live 800x600 2D geometry into
+          the HD backbuffer. Stretching that 4:3 viewport across 16:9 worked but
+          distorted the artwork horizontally.
 
-          v0.44 removes every new v0.43 D3D hook except SetViewport. The known-good
-          Reset, Present, shader-constant, and stream hooks remain. Present and
-          SetViewport now write ENTER diagnostics before doing any experimental work.
+          v0.45 keeps the HD frontend backbuffer, but fits the logical 800x600 menu
+          into the largest centered 4:3 viewport that fits the configured output.
 
-          FIRST SCALING ATTEMPT
-          ---------------------
-          During FRONTEND mode only, an 800x600 backbuffer request is expanded to the
-          configured launcher resolution through the already-proven CreateDevice/Reset
-          path. MVP2005 Modern deliberately keeps the logical UI size at 800x600 so the
-          existing menu mouse conversion remains unchanged.
+          At 2560x1440 the expected frontend viewport is:
+              X=320, Y=0, Width=1920, Height=1440
 
-          Matching FRONTEND SetViewport(0,0,800,600) calls are then expanded to the same
-          configured output resolution. Gameplay-phase viewport calls are never changed.
+          This is a uniform 2.4x scale in both axes. Original menu proportions are
+          preserved; the unused left/right areas remain outside the menu viewport.
+
+          MOUSE ALIGNMENT
+          ---------------
+          Frontend mouse input now uses the exact same centered aspect-fit transform.
+          At 2560x1440, physical X=320..2239 maps to logical X=0..799 and physical
+          Y=0..1439 maps to logical Y=0..599. Cursor positions in the side bars are
+          clamped to the nearest logical menu edge.
+
+          Gameplay retains the existing raw-HD mouse and rendering path. The verified
+          gameplay->frontend timeout transition remains in place so returning from a
+          game restores the centered frontend mouse transform.
 
           DIAGNOSTICS
           -----------
-          MVP2005Modern-MenuScale.log records:
-          - safe hook installation state;
-          - frontend CreateDevice/Reset backbuffer expansion;
-          - SETVIEWPORT ENTER before any transformation;
-          - the exact output viewport and HRESULT;
-          - PRESENT ENTER/EXIT without nested D3D surface queries;
-          - existing 2D/3D projection-matrix samples.
+          MVP2005Modern-MenuScale.log remains intentionally verbose for this preview.
+          Look for:
+          - HOOKS V45 ... aspect_fit=1 mouse_fit=1
+          - CREATEDEVICE FRONTEND BACKBUFFER 800x600 -> configured HD output
+          - SETVIEWPORT ... out=320,0 1920x1440 at 2560x1440
+          - MOUSE FRONTEND ... viewport=320,0 1920x1440
+          - GAMEPLAY SetViewport calls remaining unmodified
+          - PHASE frontend mouse transform restored after gameplay timeout
 
-          TEST
-          ----
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.44 files.
-          2. Launch normally.
-          3. Report whether startup succeeds and how the main menu looks.
-          4. Check mouse alignment in the menu.
-          5. If startup/menu works, enter gameplay and verify gameplay is unchanged.
-          6. Send MVP2005Modern-MenuScale.log.
+          TEST SEQUENCE
+          -------------
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.45 files.
+          2. Launch to the main menu and verify correct proportions and centered 4:3 layout.
+          3. Move/click across the menu and verify hit testing lines up visually.
+          4. Enter an actual game and verify gameplay resolution and mouse behavior are unchanged.
+          5. Exit back to the frontend and verify menu rendering/mouse alignment recover.
+          6. Send MVP2005Modern-MenuScale.log plus a screenshot if anything looks unusual.
 
-          To make this build diagnostic-only, add:
+          To disable only menu scaling while retaining diagnostics:
 
           [MenuScale]
           Enabled=0
@@ -141,17 +149,18 @@ jobs:
           v0.42 Skip Intro and all other production behavior remain unchanged.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.44 diagnostic component manifest
+          MVP2005 Modern v0.45 diagnostic component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
           Production baseline through Skip Intro: v0.42
-          v0.43 broad D3D probe: superseded; startup crash diagnostic
-          v0.44 safe frontend backbuffer + SetViewport probe
+          v0.43 broad D3D probe: superseded
+          v0.44 safe HD frontend viewport proof
+          v0.45 centered aspect-correct frontend viewport + matching mouse transform
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.44-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.45-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.44-x86
+          name: mvp2005modern-launcher-v0.45-x86
           path: dist/
           if-no-files-found: error
