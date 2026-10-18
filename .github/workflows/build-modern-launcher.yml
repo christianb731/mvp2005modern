@@ -35,6 +35,7 @@ on:
       - 'patches/apply_controller_restore_native_fielding_v31.py'
       - 'patches/apply_controller_live_learning_v32.py'
       - 'patches/apply_setup_cleanup_v33.py'
+      - 'patches/apply_setup_cleanup_v33_fix.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -93,6 +94,7 @@ jobs:
           python3 ../patches/apply_controller_restore_native_fielding_v31.py
           python3 ../patches/apply_controller_live_learning_v32.py
           python3 ../patches/apply_setup_cleanup_v33.py
+          python3 ../patches/apply_setup_cleanup_v33_fix.py
           git diff --check
           git diff --stat
 
