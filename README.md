@@ -1,135 +1,178 @@
 # MVP2005 Modern
 
-Compatibility, widescreen, and modding-layer work for a user-owned PC installation of **MVP Baseball 2005** on modern Windows.
+Compatibility, widescreen, controller, and launcher work for a user-owned PC installation of **MVP Baseball 2005** on modern Windows.
 
-## Compatibility status
+MVP2005 Modern does **not** distribute `mvp2005.exe`, game assets, a no-CD executable, or a DRM bypass. The original SafeDisc/media verification flow remains in use through SafeDiscShim.
 
-The Windows 11 compatibility layer is now at **RC1**. The behavior validated during the v16 test series is frozen as the reference baseline:
+## Current status
 
-- MVP Baseball 2005 launches on modern Windows with the original SafeDisc flow handled by SafeDiscShim.
-- dgVoodoo2 provides the Direct3D 8 / DirectDraw compatibility layer.
-- the MVP-specific runtime patches high-resolution modes and widescreen projection;
-- the game runs true borderless instead of exclusive fullscreen;
-- frontend/menu mouse coordinates map correctly across the full display;
-- gameplay mouse coordinates use the game's native/raw mapping;
-- repeated menu -> gameplay -> menu transitions restore the correct input mode automatically;
-- Alt-Tab works normally without MVP minimizing itself or stealing focus back;
+The Windows 11 compatibility runtime is at the verified **RC1** baseline. The current launcher preview is **v0.33**, with the v0.32 controller behavior intentionally frozen.
+
+Verified runtime behavior:
+
+- MVP Baseball 2005 launches on modern Windows with the original SafeDisc flow handled by SafeDiscShim;
+- dgVoodoo2 provides the Direct3D 8 / DirectDraw compatibility layer;
+- high-resolution modes and true widescreen projection work;
+- the game runs true borderless rather than exclusive fullscreen;
+- frontend/menu and gameplay mouse coordinates are handled separately and correctly;
+- repeated menu -> gameplay -> menu transitions recover input correctly;
+- Alt-Tab works without MVP minimizing itself or stealing focus back;
 - the upstream large-drive save fix remains enabled.
 
-The final known-good development build before cleanup is preserved by Git history at commit:
+The final known-good pre-cleanup compatibility runtime is preserved in Git history at:
 
 `a7e2342b7464faa223c7d4e91b26f3d3b88db6f3`
 
-## Required dgVoodoo settings
+GitHub Actions pins upstream `ostrich/mvp2005fix` at:
 
-The validated true-borderless configuration uses:
+`1c0dae9b030a8fb66648655c8d14043af1ead676`
+
+## Quick start
+
+1. Install MVP Baseball 2005 from your original media.
+2. Put `MVP2005Modern.exe` and `mvp2005fix.dll` together in a normal writable folder.
+3. Run `MVP2005Modern.exe`.
+4. Let the launcher reuse the detected/remembered installation, or browse to the original `mvp2005.exe`.
+5. Click **Verify / Repair** once.
+6. Choose a resolution and click **Launch Game**.
+
+The launcher keeps its own configuration in `mvp2005fix.ini` beside `MVP2005Modern.exe`.
+
+## v0.33 setup cleanup
+
+v0.33 makes the compatibility setup path more suitable for normal installations, especially when MVP Baseball 2005 is installed under `Program Files`.
+
+### Verify / Repair
+
+**SafeDiscShim v0.9.0**
+
+- detects the installed SafeDiscShim environment;
+- downloads only the pinned official installer when needed;
+- verifies the installer SHA-256 before execution;
+- uses the normal Windows UAC elevation flow;
+- distinguishes a canceled UAC prompt from a generic installation failure;
+- keeps MVP's original disc/media verification requirement intact.
+
+**dgVoodoo2 v2.87.5**
+
+- downloads the pinned official release ZIP when files are missing or a forced repair is requested;
+- verifies the ZIP SHA-256 before extraction;
+- installs the x86 `D3D8.dll`, `DDraw.dll`, and `D3DImm.dll` beside `mvp2005.exe`;
+- backs up pre-existing compatibility files once under `MVP2005Modern.Backup\compatibility`;
+- applies and verifies the known-good MVP-specific dgVoodoo configuration.
+
+### Protected game folders
+
+The launcher disables Windows file virtualization and probes the **real** selected game directory. If that directory is not writable, only the local dgVoodoo repair step is relaunched with administrator rights. The whole launcher does not need to run elevated.
+
+After the elevated helper returns, the parent launcher verifies that the expected files and validated dgVoodoo settings are actually present in the real game folder instead of trusting only the helper's exit code.
+
+### Setup health display
+
+The launcher now reports useful setup state instead of a generic compatibility message, including:
+
+- SafeDiscShim missing;
+- dgVoodoo wrapper files missing;
+- dgVoodoo present but not using the validated MVP profile;
+- compatibility stack ready.
+
+The v0.33 clean-machine path is compiled and CI-tested, but it should still be treated as a preview until it has been exercised on a fresh Windows 10/11 machine with neither external dependency preinstalled.
+
+## Required dgVoodoo profile
+
+The validated MVP setup includes these important settings:
 
 ```ini
 [General]
+OutputAPI = bestavailable
 FullScreenMode = false
+ScalingMode = stretched
+KeepWindowAspectRatio = false
+CaptureMouse = false
+CenterAppWindow = false
+
+[GeneralExt]
+FreeMouse = false
 
 [DirectX]
+DisableAndPassThru = false
+VideoCard = geforce_9800_gt
+VRAM = 1024
+Resolution = unforced
 AppControlledScreenMode = false
+DisableAltEnterToToggleScreenMode = true
+ForceVerticalSync = false
+dgVoodooWatermark = false
+
+[DirectXExt]
+DefaultEnumeratedResolutions = all
 ```
 
-The launcher owns the tested MVP-specific dgVoodoo profile, including the settings above, so users do not need to configure them manually.
+The launcher owns these tested MVP-specific compatibility settings so users do not need to configure dgVoodoo manually.
 
 ## Runtime configuration
 
-The MVP2005 Modern launcher automatically enables the custom borderless runtime and writes resolution/widescreen settings. For a 16:9 output, the tested horizontal projection scale is `0.75`.
+For a 16:9 output, the tested horizontal projection scale is `0.75`. Resolution, widescreen, borderless mode, and the large-drive save fix are written through the launcher.
 
-Debug logging should normally be left off. It can be enabled in `mvp2005fix.ini` when diagnosing a compatibility problem:
+General runtime logging is normally off and can be enabled with:
 
 ```ini
 [Debug]
 Logging=1
 ```
 
-## Production runtime
+## Controller baseline
 
-`patches/apply_production_rc1.py` is the canonical RC1 build entry point. It assembles the proven v16 behavior, removes experiment-only probes/log spam, verifies the critical compatibility hooks, and leaves the older development patches in Git history as rollback material.
+Controller work is intentionally frozen at the **v0.32 persistent live-learner baseline** rather than continuing to change fixed mappings.
 
-GitHub Actions pins upstream `ostrich/mvp2005fix` at:
+On the development Flydigi Vader 3 / XInput setup, the currently usable baseline includes working face buttons, pitch 5 on RB, Start/pause behavior, fixed L3 behavior, and persisted learned mappings for the remaining controls.
 
-`1c0dae9b030a8fb66648655c8d14043af1ead676`
+Learned mappings are stored in:
 
-The standalone compatibility artifact is:
+```ini
+[ControllerLearned]
+```
 
-`mvp2005modern-compatibility-rc1-x86`
+and are reloaded on future launches.
 
-## All-in-one launcher
+The live learner remains available as a fallback for controls that need machine/controller-specific adjustment:
 
-The product goal is **one launcher that can start from a normal user-owned MVP Baseball 2005 installation on a machine that does not already have SafeDiscShim or dgVoodoo2 configured**.
+- `Ctrl+F1` — LB
+- `Ctrl+F2` — LT
+- `Ctrl+F3` — RT
+- `Ctrl+F4` — Back/View
+- press the selected physical control repeatedly to cycle candidates;
+- `Ctrl+Enter` — lock and persist the candidate that works;
+- `Ctrl+Backspace` — clear the selected learned mapping.
 
-Current launcher layers:
+Normal play no longer creates the very large controller diagnostic log. It is opt-in with:
 
-- `apply_modern_launcher_v1.py` — core configuration UI;
-- `apply_modern_launcher_v2.py` — automatic SafeDiscShim/dgVoodoo setup and repair;
-- `apply_modern_launcher_v3.py` / `apply_skip_intro_runtime_v3.py` — experimental intro-skip work retained but disabled in the visible launcher;
-- `apply_controller_configurator_v4.py` — integrated DirectInput/controller.cfg support;
-- `apply_controller_configurator_v5.py` — calibration-first press-to-bind controller setup.
+```ini
+[ControllerDebug]
+Logging=1
+```
 
-The launcher can detect/install the pinned compatibility dependencies, configure the verified RC1 runtime, select resolution/widescreen settings, configure controllers, and launch MVP through the verified injection path.
+The integrated **Controller Setup** window remains available for generating/editing an MVP `controller.cfg`, but users with a working v0.32 learned setup should not recalibrate just for normal use.
 
-### Controller configurator v0.5
+## Intro videos
 
-MVP Baseball 2005 stores controller profiles in `Documents\MVP Baseball 2005\controller.cfg`. Modern controllers can expose different DirectInput button orders depending on the controller, connection method, driver and middleware, so v0.5 no longer expects users to understand or guess button numbers.
+Intro-video skipping is deferred. The visible launcher option remains removed/disabled, normal settings saves do not modify the movie files, and the compatibility runtime does not depend on intro skipping.
 
-The recommended flow is:
+## Pinned external components
 
-1. select the connected controller;
-2. choose the Xbox-style or generic stick/trigger representation;
-3. click **Calibrate by pressing buttons...**;
-4. press A, B, X, Y, LB, RB, View/Back, Menu/Start, L3 and R3 when prompted;
-5. click **Save to MVP**.
-
-The launcher polls the selected DirectInput device and records the physical button IDs it actually receives. Numeric IDs remain visible only as an advanced/reference view because `controller.cfg` ultimately stores numbered buttons.
-
-The calibration prompts explain the main MVP use of each physical control. For the generated Xbox-style mapping:
-
-- A — confirm, normal swing, pitch 1, throw home;
-- B — back, pitch 2, throw first;
-- X — bunt, pitch 3, throw third;
-- Y — pitch 4, throw second;
-- LB — relay/shoulder action;
-- RB — pitch 5 and fielder switch;
-- View/Back — select;
-- Menu/Start — pause/menu;
-- L3 / R3 — stick-click actions.
-
-The legacy Xbox 360 and generic DirectInput presets remain available as quick-start fallbacks, but the UI explicitly recommends calibration because button ordering can vary on current hardware/software stacks.
-
-Saving replaces only the selected controller profile while preserving other profiles in `controller.cfg`. The original file is backed up once as `controller.cfg.mvp2005modern.bak`.
-
-### Intro videos
-
-Intro-video skipping is deferred. The earlier checkbox is hidden and normal launcher saves force the experimental setting off. The compatibility/runtime baseline is unaffected.
-
-### Automatic compatibility setup
-
-On Launch or **Setup / Repair**, MVP2005 Modern handles:
-
-- **SafeDiscShim v0.9.0** — when missing, download the official release, verify SHA-256, request the required UAC elevation, and install it while preserving the original SafeDisc/media verification flow;
-- **dgVoodoo2 v2.87.5** — when missing/incomplete, download the official release, verify SHA-256, install the x86 D3D8/DirectDraw wrapper files beside the game, back up existing compatibility files, and apply the known-good MVP configuration;
-- **MVP2005 Modern RC1 runtime** — the bundled runtime provides high resolution, widescreen, true borderless, correct menu/gameplay mouse handling and fixed Alt-Tab behavior.
-
-Pinned external downloads:
-
-- SafeDiscShim v0.9.0 installer — SHA-256 `b4c355ec63047a09c20c286c083fcad1031d47a2c17eac0de12b96d377ec369f`
-- dgVoodoo2 v2.87.5 release ZIP — SHA-256 `5ffde6927f7355ca3fdd5d785b581256a8e6539fa13e395a891ade6ba1040850`
-
-The clean-machine path is intentionally supported in code but still needs a real-world test on Windows 10/11 with neither dependency already present.
+- **SafeDiscShim v0.9.0 installer** — SHA-256 `b4c355ec63047a09c20c286c083fcad1031d47a2c17eac0de12b96d377ec369f`
+- **dgVoodoo2 v2.87.5 release ZIP** — SHA-256 `5ffde6927f7355ca3fdd5d785b581256a8e6539fa13e395a891ade6ba1040850`
 
 ## Components
 
-- **SafeDiscShim** — compatibility for the original game's SafeDisc launch flow.
-- **dgVoodoo2** — modern Direct3D/DirectDraw wrapper.
-- **mvp2005fix** — upstream resolution, widescreen and large-drive compatibility work.
-- **MVP2005 Modern runtime patches** — true borderless presentation, phase-aware mouse handling, Alt-Tab behavior and MVP-specific integration.
-- **MVP2005 Modern launcher** — automatic setup, path, resolution, controller and compatibility configuration, with profiles/mod management planned on top.
+- **SafeDiscShim** — compatibility for the original game's SafeDisc launch flow;
+- **dgVoodoo2** — modern Direct3D/DirectDraw wrapper;
+- **mvp2005fix** — upstream resolution, widescreen, and large-drive compatibility work;
+- **MVP2005 Modern runtime patches** — true borderless presentation, phase-aware mouse handling, Alt-Tab fixes, and controller translation;
+- **MVP2005 Modern launcher** — setup verification/repair, path detection, resolution, controller configuration, and launch orchestration.
 
-No MVP Baseball 2005 game files, copyrighted EA/MLB assets, no-CD executable, or DRM bypass are distributed by this repository.
+## Repository build structure
 
-## Next phase
+`patches/apply_production_rc1.py` is the compatibility-runtime baseline. The launcher/controller work is currently layered afterward by the build workflow so the history of experiments remains reproducible.
 
-After controller calibration and clean-machine dependency setup are tested, the next work is profile/mod management: isolated profiles, backup/restore, file manifests, activation/deactivation and presets such as Vanilla, modern rosters and Total Classics while keeping the base installation recoverable.
+The next cleanup step is to consolidate the proven launcher/controller patches into a smaller production patch set once v0.33 has been exercised on Windows. After that, the planned product work is profile/mod management: isolated profiles, baseline manifests, backup/restore, activation/deactivation, and presets such as Vanilla, modern rosters, and Total Classics while keeping the base installation recoverable.
