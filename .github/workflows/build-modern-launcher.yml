@@ -77,6 +77,7 @@ jobs:
           python3 ../patches/apply_menu_scale_safe_v44.py
           python3 ../patches/apply_menu_scale_aspect_v45.py
           python3 ../patches/apply_menu_scale_widescreen_v46.py
+          python3 ../patches/apply_menu_scale_draw_probe_v47.py
           git diff --check
           git diff --stat
 
@@ -93,64 +94,65 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.46 - Hybrid 16:9 Frontend Scaling
+          MVP Baseball 2005 Modern v0.47 - Coherent Frontend Fit + Draw-Path Probe
 
-          WHAT v0.45 TAUGHT US
-          --------------------
-          v0.45 correctly created a centered 1920x1440 4:3 viewport at 2560x1440,
-          and its mouse transform matched that viewport. The screenshot showed that
-          several menu labels were clipped at the left viewport boundary, however.
-          That means some frontend draws do not tolerate a non-zero D3D viewport
-          origin even though the main background/panel geometry does.
+          WHY v0.47 EXISTS
+          ----------------
+          v0.46 proved that frontend shader handles are not reliable labels for
+          "background" versus "UI". Giving different shader IDs different projection
+          transforms split the menu into incompatible coordinate systems.
 
-          v0.46 therefore keeps the FRONTEND D3D viewport at the complete configured
-          output, starting at 0,0, and performs aspect work in the verified 800x600
-          orthographic matrix instead.
+          v0.47 removes that shader-based split. It also fixes a hidden double-transform
+          discovered in v0.46: after fitting the frontend matrix, the older gameplay
+          widescreen hook could mistake the fitted matrix for 3D and scale its X row a
+          second time.
 
-          HYBRID 16:9 EXPERIMENT
-          ----------------------
-          At 2560x1440, v0.46 classifies exact 800x600 frontend orthographic matrix
-          submissions using the shader handle observed in the v0.44/v0.45 logs:
+          COHERENT FRONTEND BASELINE
+          --------------------------
+          The frontend still uses a full 0,0 HD D3D viewport, avoiding the clipping
+          exposed by v0.45. Every exact original 800x600 frontend orthographic matrix
+          now receives the SAME centered aspect-correct transform.
 
-          UI_FIT (shader 0x00000005)
-          - keeps the original 800x600 UI at correct proportions;
-          - maps it to an effective centered 1920x1440 region;
-          - does this through the projection matrix, not a clipped viewport.
+          At 2560x1440 this corresponds to the original 800x600 interface occupying
+          an effective 1920x1440 region centered from X=320 through X=2240, while the
+          actual D3D viewport remains the complete 2560x1440 target.
 
-          BACKGROUND_COVER (other 800x600 2D shaders)
-          - fills the complete 2560x1440 output without horizontal stretching;
-          - uniformly scales 800x600 to 2560x1920;
-          - center-crops 240 physical pixels from the top and bottom (75 logical
-            pixels each) to make a 4:3 source cover a 16:9 screen.
+          The fitted matrix is explicitly recognized by the older gameplay/aspect logic
+          so it is not treated as a 3D matrix and is not modified again.
 
-          This is intentionally a first empirical classification. The detailed log
-          records the shader handle and exact before/after matrix for every early
-          transformed layer so we can refine which layers are UI versus background.
+          DRAW-PATH DIAGNOSTICS
+          ---------------------
+          v0.47 hooks only the four standard D3D8 draw entry points:
+          - DrawPrimitive
+          - DrawIndexedPrimitive
+          - DrawPrimitiveUP
+          - DrawIndexedPrimitiveUP
 
-          MOUSE
-          -----
-          The frontend mouse continues using the known 800x600 UI fit region because
-          UI hit boxes remain in the original logical coordinate system. Gameplay
-          keeps the existing raw-HD mouse path.
+          These hooks perform NO nested COM or surface queries. They only record the
+          already-known shader/stream state, primitive metadata, and the caller address
+          / mvp2005.exe RVA. This should let us identify actual fullscreen/background
+          draw paths by callsite rather than guessing from shader handles.
 
-          DIAGNOSTICS
-          -----------
-          MVP2005Modern-MenuScale.log remains intentionally verbose. Look for:
-          - HOOKS V46 ... full_viewport=1 ui_fit_matrix=1 background_cover=1
+          MVP2005Modern-MenuScale.log should contain:
+          - HOOKS V47 ... draw=1/1/1/1 ... coherent_fit=1 draw_trace=1
           - SETVIEWPORT ... out=0,0 2560x1440
-          - WIDE MATRIX ... mode=UI_FIT shader=0x00000005
-          - WIDE MATRIX ... mode=BACKGROUND_COVER shader=...
+          - FIT MATRIX ... mode=COHERENT_FIT
+          - DRAW ... kind=DP/DIP/DPUP/DIPUP ... rva=0x........
           - MOUSE FRONTEND ... viewport=320,0 1920x1440
 
           TEST SEQUENCE
           -------------
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.46 files.
-          2. Launch to the main menu.
-          3. Check whether the previously clipped menu text is now completely visible.
-          4. Check whether the background fills the 16:9 screen without looking wide.
-          5. Check mouse alignment over multiple menu choices.
-          6. If practical, enter gameplay and return to the frontend.
-          7. Send MVP2005Modern-MenuScale.log and a screenshot.
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.47 files.
+          2. Launch to the main menu and take a screenshot.
+          3. Check whether all UI elements now share one coherent layout.
+          4. Check mouse alignment over several menu choices.
+          5. If the frontend is usable, enter an actual game and verify gameplay is unchanged.
+          6. Exit back to the frontend and verify the menu transform/mouse recover.
+          7. Send MVP2005Modern-MenuScale.log and the screenshot.
+
+          v0.47 is deliberately a coherent diagnostic baseline, not yet the final
+          background-fill widescreen implementation. The draw-path data is intended to
+          make that next step targeted and safe.
 
           To disable only menu scaling while retaining diagnostics:
 
@@ -161,19 +163,20 @@ jobs:
           v0.42 Skip Intro and all other production behavior remain unchanged.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.46 diagnostic component manifest
+          MVP2005 Modern v0.47 diagnostic component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
           Production baseline through Skip Intro: v0.42
           v0.43 broad D3D probe: superseded
           v0.44 full-HD frontend viewport proof
-          v0.45 centered 4:3 viewport proof; exposed non-zero-origin UI clipping
-          v0.46 full viewport + UI-fit/background-cover orthographic matrix experiment
+          v0.45 centered viewport proof; exposed non-zero-origin clipping
+          v0.46 shader-split widescreen experiment; rejected as semantic classifier
+          v0.47 full viewport + coherent fitted frontend projection + safe draw-call probe
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.46-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.47-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.46-x86
+          name: mvp2005modern-launcher-v0.47-x86
           path: dist/
           if-no-files-found: error
