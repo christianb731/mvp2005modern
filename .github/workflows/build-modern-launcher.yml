@@ -22,6 +22,7 @@ on:
       - 'patches/apply_controller_frontend_gameplay_split_v18.py'
       - 'patches/apply_controller_x_quarantine_v19.py'
       - 'patches/apply_controller_zero_based_profile_v20.py'
+      - 'patches/apply_controller_one_based_final_v21.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -67,6 +68,7 @@ jobs:
           python3 ../patches/apply_controller_frontend_gameplay_split_v18.py
           python3 ../patches/apply_controller_x_quarantine_v19.py
           python3 ../patches/apply_controller_zero_based_profile_v20.py
+          python3 ../patches/apply_controller_one_based_final_v21.py
           git diff --check
           git diff --stat
 
@@ -83,57 +85,55 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.20
+          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.21
 
-          WHAT v0.19 + THE NEW TEST PROVED
+          WHY v0.21 RETURNS TO ONE-BASED
           --------------------------------
-          The v0.19 log shows the new X quarantine itself worked: physical X is
-          XInput 0x4000, raw DI slot 2, and the runtime moves it to output slot 14.
-          However the controller.cfg loaded by the game was still the older profile,
-          so nothing in that file was bound to slot 14 and X correctly did nothing.
+          The v0.20 test reproduced the classic MVP 2005 modern-controller offset:
+          physical Y (zero-based slot 3) acted like X/Square and threw to third,
+          while physical L3 (slot 8) acted like Start and paused. That is the exact
+          pattern historically seen when MVP's one-based controller profile is fed
+          an unshifted zero-based XInput/DirectInput button array.
 
-          More importantly, physical Y is XInput 0x8000 and output DI slot 3, and
-          the game is treating it as Throw Third. The loaded profile has Throw Third
-          on "button 3". That matches the older L3/Start and LB/pitch symptoms too:
-          on this modern DirectInput path MVP is consuming controller.cfg button
-          numbers as zero-based DI slots.
+          Earlier v0.13 had already shown the inverse: shifting modern XInput buttons
+          into logical slots 1..10 made the face buttons and Start work correctly.
 
-          v0.20 makes the generated Xbox-style profile match that proven convention:
-            - learned UI numbers stay human-friendly 1..10
-            - controller.cfg logical buttons become 0..9
-            - frontend A/B/X/Y bank becomes slots/buttons 10..13
-            - gameplay X remains quarantined from unsafe slot 2 to slot/button 14
-            - Y stays slot/button 3 and is now bound to the Y/second-base actions
-            - LB/RB/View/Start/L3/R3 become buttons 4/5/6/7/8/9 respectively
+          v0.21 therefore uses the canonical, long-established MVP Xbox layout end
+          to end:
+            A/B/X/Y -> logical slots/buttons 1/2/3/4
+            LB/RB -> 5/6
+            View/Start -> 7/8
+            L3/R3 -> 9/10
+            LT/RT -> axis-3 / axis+3
 
-          This should also fix the long-running clues where L3 paused the game and
-          LB behaved like a face/pitch button: those were the same +1 profile offset.
+          The v18 corrected stick-axis signs are retained. The v17 diagnostics are
+          also retained. v0.21 starts in F7 / XINPUT_ONE_BASED mode. Ctrl+F8 is still
+          available as an immediate zero-based comparison if needed, without another
+          build.
 
           TEST
           ----
-          1. Replace BOTH MVP2005Modern.exe and mvp2005fix.dll with the v0.20 files.
+          1. Replace BOTH MVP2005Modern.exe and mvp2005fix.dll.
           2. Open Controller Setup and click Save to MVP once. Do not recalibrate.
-          3. Launch normally.
-          4. In fielding test:
-               A = throw home
-               B = throw first
-               X = throw third, with NO menu
-               Y = throw second
-          5. Test Start = pause, L3/R3, LB/RB, and the triggers.
-          6. If anything is wrong, upload mvp2005controller_diagnostic.log again.
-
-          The new log should identify itself as "zero-based profile v20" and the
-          loaded controller.cfg should show Start=button 7, L3=button 8, Y gameplay
-          actions=button 3, and X gameplay actions=button 14.
+          3. Test in one fielding sequence:
+               A = home
+               B = first
+               X = third
+               Y = second
+               Start = pause
+               L3 must NOT pause
+          4. Then test LB/RB/R3/LT/RT in their relevant contexts.
+          5. If any of those six core checks fail, press Ctrl+F8 once and repeat only
+             the failed control. The diagnostic log will record the mode change.
 
           Compatibility/runtime behavior outside controller handling remains on the
           verified RC1 path. Intro-video skipping remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.20-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.21-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.20-x86
+          name: mvp2005modern-launcher-v0.21-x86
           path: dist/
           if-no-files-found: error
