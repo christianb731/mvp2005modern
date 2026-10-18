@@ -70,6 +70,7 @@ jobs:
           python3 ../patches/apply_skip_intro_cache_v37.py
           python3 ../patches/apply_skip_intro_ea_header_v38.py
           python3 ../patches/apply_skip_intro_ea_trim_v39.py
+          python3 ../patches/apply_skip_intro_sccl_v40.py
           git diff --check
           git diff --stat
 
@@ -86,67 +87,50 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.39 - Self-Consistent EA VP6 Skip Intro Preview
+          MVP Baseball 2005 Modern v0.40 - SCCl Endian-Correct Skip Intro Preview
 
-          WHY v0.39 EXISTS
+          WHAT v0.39 PROVED
+          -----------------
+          The physically trimmed EA VP6/ADPCM cache is playable and safe: both intro
+          movies load from the cache, and manually clicking Skip immediately advances
+          through them. However, the movies did not end automatically.
+
+          WHAT v0.40 FIXES
           ----------------
-          v0.38 proved that MVP's player does not tolerate reducing only the MVhd/SCHl
-          declared durations while leaving the full original media stream behind. The
-          game transitioned to a white screen and then exited/crashed.
+          v0.39 exposed an endian bug in the EA SCCl audio count block. SCCl's 4-byte
+          payload is stored big-endian even though PC EA chunk-size fields are little-
+          endian. v0.39 therefore logged impossible counts such as 2852126720 and
+          4261937152 and wrote the replacement count in the wrong byte order.
 
-          v0.39 therefore stops lying about a long stream's duration. It constructs a
-          genuinely short EA Multimedia file from the user's own installed intro movie.
-          The installed easports.vp6 and mvpintro.vp6 files remain untouched.
-
-          HOW IT WORKS
-          ------------
-          For each startup movie, MVP2005 Modern copies the source into its private
-          MVP2005Modern.IntroCache, validates every EA chunk boundary, and then builds a
-          shorter cache from an exact prefix of the original chunk stream:
-
-          - MVhd and SCHl/GSTR headers are retained.
-          - Original MV0K/MV0F VP6 chunks are retained in their original order.
-          - Original SCDl EA-ADPCM chunks are retained in their original order.
-          - Enough real video frames and real audio samples are kept for about 120 ms.
-          - The movie's own original SCEl end chunk is appended.
-          - MVhd frame count is changed to the exact retained video-frame count.
-          - SCHl total samples is changed to the exact retained SCDl sample count.
-          - SCCl block count is corrected when present.
-          - The cache file is physically truncated; no discarded media remains after SCEl.
-
-          For revision-3 EA audio, SCDl duration is read from the same big-endian packet
-          sample-count field used by FFmpeg's EA demuxer. Unknown/malformed layouts fail
-          closed and MVP opens the original movie normally.
+          v0.40 keeps the successful self-consistent media trim unchanged, but reads and
+          writes the SCCl SCDl-block count as big-endian. For the observed originals,
+          those raw values decode to sane counts such as 170 and 2302. The trimmed cache
+          writes the exact retained SCDl block count and verifies it before use.
 
           TEST
           ----
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.39 files.
-          2. Delete MVP2005Modern.IntroCache once before the first v0.39 test.
-          3. Keep Large Address Aware and other known-good settings as desired.
-          4. Enable "Skip EA Sports / MVP intro videos".
-          5. Launch MVP.
-          6. Report whether both intros flash by and reach the main menu, remain visible,
-             show a white screen, freeze, or crash.
-          7. Send MVP2005Modern-Intro.log after the run.
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.40 files.
+          2. Delete MVP2005Modern.IntroCache before the first v0.40 test.
+          3. Enable "Skip EA Sports / MVP intro videos".
+          4. Launch MVP and DO NOT click during the intros.
+          5. Report whether both intros now end automatically and reach the main menu.
+          6. Send MVP2005Modern-Intro.log after the run.
 
           DIAGNOSTICS
           -----------
-          The dedicated intro log records the first 40 original EA chunks, MVhd/SCHl
-          metadata, target durations, original SCEl location, selected real video/audio
-          counts, final cache size, calculated retained video/audio durations, redirect
-          result, and explicit fallback whenever validation fails.
+          Look for "EA TRIM SCCl blocks_be=...->... verify_be=...". A correct build
+          should show sane original block counts and verify_be equal to the retained
+          audio-block count. All v0.39 chunk, duration, cache, redirect, and fallback
+          diagnostics remain enabled.
 
           SAFETY / REVERSIBILITY
           ----------------------
-          The installed movie files are never modified. Unchecking Skip Intro restores
-          normal movie access on the next launch. The IntroCache directory is disposable
-          and is regenerated only from the user's own files.
-
-          Existing SafeDiscShim, dgVoodoo, borderless, resolution, controller, setup,
-          and Large Address Aware behavior is otherwise unchanged.
+          The installed .vp6 files are never modified. The IntroCache is disposable and
+          regenerated from the user's own originals. Any validation failure falls back
+          to the original movie.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.39 component manifest
+          MVP2005 Modern v0.40 component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
           Controller baseline: v0.32
           Setup layer: v0.33
@@ -156,12 +140,13 @@ jobs:
           Intro format probe: v0.37 (established EA Multimedia container)
           Intro metadata-only duration experiment: v0.38 (superseded; white-screen/crash)
           Intro self-consistent EA VP6/ADPCM prefix trim: v0.39
+          Intro SCCl big-endian count correction: v0.40
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.39-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.40-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.39-x86
+          name: mvp2005modern-launcher-v0.40-x86
           path: dist/
           if-no-files-found: error
