@@ -23,7 +23,8 @@ marker = 'static int intro_diag_target_path(const char *path)\n'
 if runtime.count(marker) != 1:
     raise SystemExit(f"skip intro v36 trace helper marker: found {runtime.count(marker)}")
 
-helpers = r'''typedef USHORT (WINAPI *IntroRtlCaptureStackBackTraceFn)(ULONG, ULONG, PVOID *, PULONG);
+helpers = r'''static void intro_diag_describe_caller(void *caller, char *out, DWORD out_size);
+typedef USHORT (WINAPI *IntroRtlCaptureStackBackTraceFn)(ULONG, ULONG, PVOID *, PULONG);
 
 static int intro_diag_name_is(const char *path, const char *name)
 {
@@ -77,17 +78,17 @@ static void intro_diag_dump_stack(void)
 {
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
     IntroRtlCaptureStackBackTraceFn capture = NULL;
+    FARPROC proc = NULL;
     PVOID frames[24];
     USHORT count = 0;
     USHORT i;
 
-    if (ntdll)
-        capture = (IntroRtlCaptureStackBackTraceFn)GetProcAddress(ntdll, "RtlCaptureStackBackTrace");
-    if (!capture) {
+    if (ntdll) proc = GetProcAddress(ntdll, "RtlCaptureStackBackTrace");
+    if (!proc) {
         HMODULE k32 = GetModuleHandleA("kernel32.dll");
-        if (k32)
-            capture = (IntroRtlCaptureStackBackTraceFn)GetProcAddress(k32, "RtlCaptureStackBackTrace");
+        if (k32) proc = GetProcAddress(k32, "RtlCaptureStackBackTrace");
     }
+    if (proc) memcpy(&capture, &proc, sizeof(capture));
     if (!capture) {
         intro_diag_logf("STACK capture unavailable");
         return;
