@@ -31,6 +31,7 @@ on:
       - 'patches/apply_controller_buttonized_modifiers_v27.py'
       - 'patches/apply_controller_back_manager_macro_v28.py'
       - 'patches/apply_controller_no_macro_cleanup_v29.py'
+      - 'patches/apply_controller_lt_field_switch_v30.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -85,6 +86,7 @@ jobs:
           python3 ../patches/apply_controller_buttonized_modifiers_v27.py
           python3 ../patches/apply_controller_back_manager_macro_v28.py
           python3 ../patches/apply_controller_no_macro_cleanup_v29.py
+          python3 ../patches/apply_controller_lt_field_switch_v30.py
           git diff --check
           git diff --stat
 
@@ -101,7 +103,7 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Stable No-Macro Controller Layout v0.29
+          MVP Baseball 2005 Modern - LT Field Switch Layout v0.30
 
           WORKING CONTROLS ARE FROZEN
           ---------------------------
@@ -109,41 +111,39 @@ jobs:
           RB      = pitch 5
           Start   = pause
           L3      = no longer pauses
-          LB      = working pickoff/contextual control; controller.cfg also binds
-                    relay/cutoff to the same working L1 slot
-          RT      = confirmed relay/cutoff (R2)
+          RT      = confirmed relay/cutoff
+
+          LT / CHANGE FIELDER
+          -------------------
+          The user's MVP control-summary image identifies Change Fielder as control
+          button 5. Our runtime already has a proven working logical button-5 path.
+
+          v0.30 therefore routes physical LT directly to that known-good button-5
+          gameplay action. This is NOT L2/button-11 emulation. Button 11 remains
+          suppressed because that path was proven ineffective.
+
+          LB continues to feed button 5 as well, so both LB and LT can invoke MVP's
+          native button-5 contextual action. In the field that should change the
+          controlled fielder; while pitching it can retain the game's contextual
+          pickoff behavior already observed on that same action.
 
           BACK / VIEW
           -----------
-          There is NO macro in this build.
-
-          Back/View is only a plain alias of R2. MVP 2005 does not have a separate
-          controller.cfg action named "open manager menu"; its original manager/
-          bullpen/dugout interface is contextual R2 + D-pad. Therefore Back by
-          itself is intentionally expected to do nothing. If desired, hold Back
-          and use the D-pad exactly as you would hold RT and use the D-pad.
-
-          LT
-          --
-          LT is intentionally unused in gameplay. LT and LT+base were proven to
-          reach MVP correctly, but the game did not respond to the emulated L2
-          binding on this controller path. LB already supplies useful pickoff
-          behavior, so v0.29 stops spending another control on an ineffective L2
-          emulation rather than disturbing the working layout.
+          No macro. Back remains a plain R2 alias only. No synthesized D-pad input.
 
           SETUP
           -----
           Replace BOTH MVP2005Modern.exe and mvp2005fix.dll. Do not recalibrate and
-          do not resave controller.cfg. The v0.27 12-button profile is still valid.
+          do not resave controller.cfg. No profile rewrite is required for v0.30.
 
           Compatibility/runtime behavior outside controller handling remains on the
           verified RC1 path. Intro-video skipping remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.29-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.30-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.29-x86
+          name: mvp2005modern-launcher-v0.30-x86
           path: dist/
           if-no-files-found: error
