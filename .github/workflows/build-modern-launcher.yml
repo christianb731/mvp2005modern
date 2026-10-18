@@ -78,6 +78,7 @@ jobs:
           python3 ../patches/apply_menu_scale_aspect_v45.py
           python3 ../patches/apply_menu_scale_widescreen_v46.py
           python3 ../patches/apply_menu_scale_draw_probe_v47_bootstrap.py
+          python3 ../patches/apply_menu_scale_native_v48.py
           git diff --check
           git diff --stat
 
@@ -94,89 +95,75 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.47 - Coherent Frontend Fit + Draw-Path Probe
+          MVP Baseball 2005 Modern v0.48 - Native 800x600 Frontend Baseline
 
-          WHY v0.47 EXISTS
-          ----------------
-          v0.46 proved that frontend shader handles are not reliable labels for
-          "background" versus "UI". Giving different shader IDs different projection
-          transforms split the menu into incompatible coordinate systems.
+          WHAT v0.47 PROVED
+          -----------------
+          The first-start frontend used our forced 2560x1440 internal backbuffer and
+          viewport and produced a mixed/broken layout. After entering gameplay and
+          returning, MVP was back on an 800x600 frontend render target. At that point
+          our forced 2560x1440 SetViewport calls returned D3DERR_INVALIDCALL, yet the
+          visible menu became coherent.
 
-          v0.47 removes that shader-based split. It also fixes a hidden double-transform
-          discovered in v0.46: after fitting the frontend matrix, the older gameplay
-          widescreen hook could mistake the fitted matrix for 3D and scale its X row a
-          second time.
+          v0.48 deliberately makes that native post-game frontend state the startup
+          state too. The HD borderless client remains unchanged; MVP renders its
+          frontend internally at 800x600 and the wrapper scales the completed frame.
 
-          COHERENT FRONTEND BASELINE
-          --------------------------
-          The frontend still uses a full 0,0 HD D3D viewport, avoiding the clipping
-          exposed by v0.45. Every exact original 800x600 frontend orthographic matrix
-          now receives the SAME centered aspect-correct transform.
+          V0.48 FRONTEND RULES
+          --------------------
+          - CreateDevice: preserve MVP's requested 800x600 frontend backbuffer.
+          - Reset: preserve MVP's requested frontend backbuffer size.
+          - SetViewport: pass MVP's viewport through unchanged.
+          - 800x600 orthographic matrices: pass through unchanged.
+          - Mouse: map the complete borderless client directly to logical 800x600.
+          - Gameplay: retain the existing raw-HD/render behavior unchanged.
 
-          At 2560x1440 this corresponds to the original 800x600 interface occupying
-          an effective 1920x1440 region centered from X=320 through X=2240, while the
-          actual D3D viewport remains the complete 2560x1440 target.
+          DRAW-PATH PROBE
+          ---------------
+          The safe v0.47 draw hooks remain active. On gameplay -> frontend recovery,
+          the draw counter is reset so the log captures the returned frontend too.
+          This lets us compare cold-start and post-game callsites directly.
 
-          The fitted matrix is explicitly recognized by the older gameplay/aspect logic
-          so it is not treated as a 3D matrix and is not modified again.
-
-          DRAW-PATH DIAGNOSTICS
-          ---------------------
-          v0.47 hooks only the four standard D3D8 draw entry points:
-          - DrawPrimitive
-          - DrawIndexedPrimitive
-          - DrawPrimitiveUP
-          - DrawIndexedPrimitiveUP
-
-          These hooks perform NO nested COM or surface queries. They only record the
-          already-known shader/stream state, primitive metadata, and the caller address
-          / mvp2005.exe RVA. This should let us identify actual fullscreen/background
-          draw paths by callsite rather than guessing from shader handles.
-
-          MVP2005Modern-MenuScale.log should contain:
-          - HOOKS V47 ... draw=1/1/1/1 ... coherent_fit=1 draw_trace=1
-          - SETVIEWPORT ... out=0,0 2560x1440
-          - FIT MATRIX ... mode=COHERENT_FIT
-          - DRAW ... kind=DP/DIP/DPUP/DIPUP ... rva=0x........
-          - MOUSE FRONTEND ... viewport=320,0 1920x1440
+          Expected diagnostics include:
+          - HOOKS V48 ... native_frontend=1 draw_trace=1 mouse_fullclient=1
+          - CREATEDEVICE FRONTEND NATIVE backbuffer=800x600 ... internal_resize=0
+          - SETVIEWPORT ... out=0,0 800x600 ... mode=NATIVE_PASS ... hr=0x00000000
+          - MOUSE FRONTEND mode=NATIVE_FULLCLIENT ...
+          - PHASE frontend native 800x600 restored ... draw_probe_rearmed=1
+          - DRAW ... rva=0x003bd0ea / 0x003bd16e ...
 
           TEST SEQUENCE
           -------------
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.47 files.
-          2. Launch to the main menu and take a screenshot.
-          3. Check whether all UI elements now share one coherent layout.
-          4. Check mouse alignment over several menu choices.
-          5. If the frontend is usable, enter an actual game and verify gameplay is unchanged.
-          6. Exit back to the frontend and verify the menu transform/mouse recover.
-          7. Send MVP2005Modern-MenuScale.log and the screenshot.
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.48 files.
+          2. Launch to the main menu and take a screenshot immediately.
+          3. Verify the menu is coherent and mouse selection lines up.
+          4. Enter an actual game and verify gameplay remains correct.
+          5. Quit back to the main menu and take a second screenshot.
+          6. The two frontend screenshots should now use the same layout/render mode.
+          7. Send MVP2005Modern-MenuScale.log plus the two screenshots.
 
-          v0.47 is deliberately a coherent diagnostic baseline, not yet the final
-          background-fill widescreen implementation. The draw-path data is intended to
-          make that next step targeted and safe.
-
-          To disable only menu scaling while retaining diagnostics:
-
-          [MenuScale]
-          Enabled=0
-          Diagnostics=1
+          This is a stable diagnostic baseline, not the final true-16:9 frontend.
+          Once verified, the distinct DPUP draw path observed at RVA 0x003bd16e can
+          be investigated for a targeted background-only widescreen treatment.
 
           v0.42 Skip Intro and all other production behavior remain unchanged.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.47 diagnostic component manifest
+          MVP2005 Modern v0.48 diagnostic component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
           Production baseline through Skip Intro: v0.42
           v0.43 broad D3D probe: superseded
           v0.44 full-HD frontend viewport proof
           v0.45 centered viewport proof; exposed non-zero-origin clipping
           v0.46 shader-split widescreen experiment; rejected as semantic classifier
-          v0.47 full viewport + coherent fitted frontend projection + safe draw-call probe
+          v0.47 coherent matrix + draw-call probe; exposed frontend lifecycle mismatch
+          v0.48 native 800x600 frontend render path + full-client mouse + rearmed draw probe
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.47-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.48-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.47-x86
+          name: mvp2005modern-launcher-v0.48-x86
           path: dist/
           if-no-files-found: error
