@@ -73,6 +73,7 @@ jobs:
           python3 ../patches/apply_skip_intro_sccl_v40.py
           python3 ../patches/apply_skip_intro_autoclick_v41.py
           python3 ../patches/apply_skip_intro_production_v42.py
+          python3 ../patches/apply_menu_scale_probe_v43.py
           git diff --check
           git diff --stat
 
@@ -82,55 +83,88 @@ jobs:
       - name: Build Windows x86 product
         run: make -C upstream release
 
-      - name: Package launcher
+      - name: Package launcher diagnostic preview
         run: |
           mkdir -p dist
           cp upstream/release/mvp2005fix.exe dist/MVP2005Modern.exe
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.42
+          MVP Baseball 2005 Modern v0.43 - Frontend Menu Scaling Probe
 
-          SKIP INTRO
-          ----------
-          Skip Intro is now a normal supported launcher feature.
-
-          When "Skip EA Sports / MVP intro videos" is enabled, MVP2005 Modern:
-          - builds disposable short cached copies from the user's installed intro movies;
-          - validates the EA VP6/ADPCM container and preserves the original files;
-          - redirects only the two startup intro movie opens to those cached copies;
-          - sends one guarded Skip input after the first cached movie starts;
-          - injects input only while an MVP window owns the foreground;
-          - schedules the input only once so no delayed click can land on the main menu.
-
-          The mouse cursor is never moved. Unchecking Skip Intro restores normal startup
-          movie behavior on the next launch. MVP2005Modern.IntroCache may be deleted at
-          any time and will be regenerated from the installed movies when needed.
-
-          LOGGING
+          PURPOSE
           -------
-          MVP2005Modern-Intro.log is intentionally concise in v0.42. A healthy launch
-          records startup identity, one cache-ready line per movie, and the final
-          automatic-skip success. Detailed rejection, fallback, focus-abort, and input
-          failure messages remain enabled for troubleshooting.
+          This is a diagnostics-heavy experimental build for the out-of-game frontend
+          menus only. The v0.42 production Skip Intro behavior and verified gameplay
+          rendering are otherwise unchanged.
 
-          Existing SafeDiscShim, dgVoodoo, borderless, resolution, controller, setup,
-          Large Address Aware, and save-fix behavior is unchanged from the verified
-          v0.41 baseline.
+          FIRST SCALING ATTEMPT
+          ---------------------
+          v0.43 tests the safest initial hypothesis: MVP may be submitting an 800x600
+          frontend viewport while rendering into a larger HD render target.
+
+          When all of the following are true:
+          - the runtime is in FRONTEND phase rather than gameplay;
+          - MVP calls SetViewport with exactly 800x600 at 0,0; and
+          - the currently bound render target is larger than 800x600;
+
+          v0.43 expands that viewport to the complete render-target dimensions. It does
+          not alter the 800x600 logical menu coordinate system or the existing frontend
+          mouse conversion. Gameplay-phase viewports are never modified.
+
+          If the active render target is itself only 800x600, the runtime refuses to
+          force an invalid larger viewport and only records diagnostics. That result
+          would point toward render-target/blit scaling instead of viewport scaling.
+
+          DEDICATED DIAGNOSTICS
+          ---------------------
+          MVP2005Modern-MenuScale.log records:
+          - every early SetViewport/GetViewport call and whether scaling was attempted;
+          - active render-target dimensions during viewport changes;
+          - frontend/gameplay phase for D3D activity;
+          - 2D orthographic versus 3D projection matrix samples;
+          - SetRenderTarget surface dimensions;
+          - CopyRects source/destination dimensions and first source/destination rect;
+          - CreateTexture/CreateRenderTarget/CreateImageSurface dimensions;
+          - Present backbuffer, render-target, viewport, client-window, and rect state;
+          - D3D vtable hook-installation status;
+          - whether any frontend viewport replacements actually occurred.
+
+          TEST SEQUENCE
+          -------------
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.43 files.
+          2. Keep your current known-good resolution, borderless, LAA, controller, and
+             Skip Intro settings.
+          3. Launch and spend several seconds on the main menu. Note visually whether
+             the menu becomes larger, fills the screen, stretches, moves, or is unchanged.
+          4. Move the mouse around and verify whether menu hit-testing still lines up.
+          5. Enter an actual game and verify gameplay resolution/rendering is unchanged.
+          6. If practical, quit the game back to the frontend and check the menu again.
+          7. Send MVP2005Modern-MenuScale.log and describe what the menu looked like.
+
+          EMERGENCY DISABLE
+          -----------------
+          To disable only the viewport experiment while retaining diagnostics, add:
+
+          [MenuScale]
+          Enabled=0
+          Diagnostics=1
+
+          to mvp2005fix.ini.
+
+          This build does not modify menu assets or the game executable on disk.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.42 component manifest
+          MVP2005 Modern v0.43 diagnostic component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
-          Controller baseline: v0.32
-          Setup layer: v0.33
-          Large Address Aware: v0.34
-          Skip Intro production behavior: v0.42 (validated v0.41 mechanics)
+          Production baseline through Skip Intro: v0.42
+          Frontend menu SetViewport scaling experiment + D3D8 diagnostics: v0.43
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.42-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.43-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.42-x86
+          name: mvp2005modern-launcher-v0.43-x86
           path: dist/
           if-no-files-found: error
