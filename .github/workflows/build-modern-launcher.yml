@@ -34,6 +34,7 @@ on:
       - 'patches/apply_controller_lt_field_switch_v30.py'
       - 'patches/apply_controller_restore_native_fielding_v31.py'
       - 'patches/apply_controller_live_learning_v32.py'
+      - 'patches/apply_setup_cleanup_v33.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -91,6 +92,7 @@ jobs:
           python3 ../patches/apply_controller_lt_field_switch_v30.py
           python3 ../patches/apply_controller_restore_native_fielding_v31.py
           python3 ../patches/apply_controller_live_learning_v32.py
+          python3 ../patches/apply_setup_cleanup_v33.py
           git diff --check
           git diff --stat
 
@@ -107,53 +109,81 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - One-Session Controller Learner v0.32
+          MVP Baseball 2005 Modern v0.33 - Setup Cleanup Preview
 
-          THIS BUILD STOPS THE REBUILD LOOP
-          ---------------------------------
-          A/B/X/Y, RB pitch 5, Start and the fixed L3 behavior are left alone.
-          The remaining physical controls can now be learned LIVE in one running
-          game. No more recompiling a new launcher for every button guess.
+          QUICK START
+          -----------
+          1. Keep MVP2005Modern.exe and mvp2005fix.dll together in a normal writable
+             folder such as Documents or a dedicated Games tools folder.
+          2. Run MVP2005Modern.exe.
+          3. The launcher will reuse a remembered MVP installation when possible.
+             Otherwise browse to your original mvp2005.exe.
+          4. Click Verify / Repair once. The launcher verifies the compatibility
+             stack and installs/repairs only what is needed.
+          5. Choose resolution and launch the game.
 
-          LIVE LEARNING
-          -------------
-          Ctrl+F1 = learn LB
-          Ctrl+F2 = learn LT
-          Ctrl+F3 = learn RT
-          Ctrl+F4 = learn Back/View
+          WHAT VERIFY / REPAIR DOES
+          -------------------------
+          SafeDiscShim v0.9.0:
+          - downloaded only from the pinned official release URL;
+          - SHA-256 verified before execution;
+          - installed through its normal Windows UAC prompt;
+          - the original MVP Baseball 2005 disc/media verification remains in use.
 
-          After selecting a control, press that controller control repeatedly.
-          Every press advances to the next plausible MVP representation. When the
-          in-game action you want finally happens, press Ctrl+Enter. That exact
-          mapping is immediately locked and saved to mvp2005fix.ini, so it remains
-          active on later launches.
+          dgVoodoo2 v2.87.5:
+          - official ZIP is SHA-256 verified;
+          - x86 D3D8.dll, DDraw.dll and D3DImm.dll are installed beside mvp2005.exe;
+          - existing compatibility files are backed up once under
+            MVP2005Modern.Backup\compatibility;
+          - the validated MVP-specific borderless profile is applied.
 
-          Ctrl+Backspace clears the selected learned mapping and restores baseline.
+          PROGRAM FILES / ADMINISTRATOR ACCESS
+          ------------------------------------
+          The launcher disables Windows file virtualization and checks the REAL game
+          directory. If MVP is installed in a protected folder such as Program Files,
+          only the local dgVoodoo repair step is relaunched with administrator rights.
+          You do not need to run the whole launcher as Administrator.
 
-          RECOMMENDED ONE-TIME CALIBRATION
-          --------------------------------
-          1. Do NOT recalibrate or resave controller.cfg for this build.
-          2. For Change Fielder, choose the physical control you want (LB with
-             Ctrl+F1, or LT with Ctrl+F2), then press it until the fielder switches.
-             Press Ctrl+Enter immediately when it works.
-          3. Ctrl+F3, then press RT in real relay/cutoff opportunities until relay
-             works. Ctrl+Enter locks it.
-          4. Ctrl+F4 can do the same exhaustive single-button search for Back/View.
-             No manager-menu macro is synthesized.
+          CONTROLLER
+          ----------
+          The current v0.32 controller behavior is intentionally frozen. Learned
+          controller mappings remain in mvp2005fix.ini and continue to load normally.
+          Controller diagnostic logging is now OFF during normal play.
 
-          The candidate search includes all useful DI button slots, both trigger
-          directions, plus the exact FIELD_SWITCH / RELAY keyboard inputs already
-          present in MVP's controller.cfg. The diagnostic log records every tested
-          candidate and every saved result.
+          To temporarily enable the large controller diagnostic log, add:
 
-          Compatibility/runtime behavior outside controller handling remains on the
-          verified RC1 path. Intro-video skipping remains disabled.
+          [ControllerDebug]
+          Logging=1
+
+          to mvp2005fix.ini, then restart the launcher/game.
+
+          BACKUPS / SAFETY
+          ----------------
+          MVP2005 Modern does not distribute or replace mvp2005.exe and does not ship
+          game assets. Existing dgVoodoo compatibility files are backed up before the
+          launcher owns them. Intro-video modification remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.32-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          cat > dist/COMPONENTS.txt <<'EOF'
+          MVP2005 Modern v0.33 component manifest
+
+          upstream mvp2005fix commit:
+          1c0dae9b030a8fb66648655c8d14043af1ead676
+
+          SafeDiscShim v0.9.0 installer SHA-256:
+          b4c355ec63047a09c20c286c083fcad1031d47a2c17eac0de12b96d377ec369f
+
+          dgVoodoo2 v2.87.5 ZIP SHA-256:
+          5ffde6927f7355ca3fdd5d785b581256a8e6539fa13e395a891ade6ba1040850
+
+          Runtime baseline: MVP2005 Modern RC1 compatibility path
+          Controller baseline: v0.32 persistent live learner / empirical mapping
+          Setup layer: v0.33 permissions-aware Verify / Repair
+          EOF
+          (cd dist && zip -9 mvp2005modern-launcher-v0.33-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.32-x86
+          name: mvp2005modern-launcher-v0.33-x86
           path: dist/
           if-no-files-found: error
