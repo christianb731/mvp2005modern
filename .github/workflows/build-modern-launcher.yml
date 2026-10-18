@@ -77,7 +77,7 @@ jobs:
           python3 ../patches/apply_menu_scale_safe_v44.py
           python3 ../patches/apply_menu_scale_aspect_v45.py
           python3 ../patches/apply_menu_scale_widescreen_v46.py
-          python3 ../patches/apply_menu_scale_draw_probe_v47.py
+          python3 ../patches/apply_menu_scale_draw_probe_v47_bootstrap.py
           git diff --check
           git diff --stat
 
