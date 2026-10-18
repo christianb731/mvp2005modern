@@ -33,6 +33,7 @@ on:
       - 'patches/apply_controller_no_macro_cleanup_v29.py'
       - 'patches/apply_controller_lt_field_switch_v30.py'
       - 'patches/apply_controller_restore_native_fielding_v31.py'
+      - 'patches/apply_controller_live_learning_v32.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -89,6 +90,7 @@ jobs:
           python3 ../patches/apply_controller_no_macro_cleanup_v29.py
           python3 ../patches/apply_controller_lt_field_switch_v30.py
           python3 ../patches/apply_controller_restore_native_fielding_v31.py
+          python3 ../patches/apply_controller_live_learning_v32.py
           git diff --check
           git diff --stat
 
@@ -105,50 +107,53 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Native Fielding Controls v0.31
+          MVP Baseball 2005 Modern - One-Session Controller Learner v0.32
 
-          WHAT THIS CORRECTS
-          ------------------
-          The physical MVP control-summary image labels Change Fielder as button 5.
-          On the pictured Dual-Action/PS2-style numbering, button 5 is L1/LB;
-          button 7 is L2/LT. v0.30 therefore incorrectly treated LT as Change Fielder.
+          THIS BUILD STOPS THE REBUILD LOOP
+          ---------------------------------
+          A/B/X/Y, RB pitch 5, Start and the fixed L3 behavior are left alone.
+          The remaining physical controls can now be learned LIVE in one running
+          game. No more recompiling a new launcher for every button guess.
 
-          v0.31 removes that LT alias. LB remains the game's native button-5 source.
+          LIVE LEARNING
+          -------------
+          Ctrl+F1 = learn LB
+          Ctrl+F2 = learn LT
+          Ctrl+F3 = learn RT
+          Ctrl+F4 = learn Back/View
 
-          The earlier v0.27 build also moved relay/cutoff onto LB based on a mistaken
-          observation. v0.31 restores relay and cutoff to R2. In the current modern
-          profile R2 is logical button 12, already produced by physical RT.
+          After selecting a control, press that controller control repeatedly.
+          Every press advances to the next plausible MVP representation. When the
+          in-game action you want finally happens, press Ctrl+Enter. That exact
+          mapping is immediately locked and saved to mvp2005fix.ini, so it remains
+          active on later launches.
 
-          STABLE CONTROLS
-          ---------------
-          A/B/X/Y = confirmed correct
-          RB      = pitch 5
-          Start   = pause
-          L3      = no longer pauses
-          LB      = native L1 / button 5; expected Change Fielder in the field
-          RT      = native R2 / button 12; relay/cutoff restored here
-          LT      = intentionally unused for now
-          Back    = plain R2 alias only; no macro
+          Ctrl+Backspace clears the selected learned mapping and restores baseline.
 
-          IMPORTANT SETUP
-          ---------------
-          Open Controller Setup once and click Save to MVP. Do NOT recalibrate.
-          This save is required because v0.27 had written relay/cutoff to button 5;
-          v0.31 rewrites those actions back to R2/button 12.
+          RECOMMENDED ONE-TIME CALIBRATION
+          --------------------------------
+          1. Do NOT recalibrate or resave controller.cfg for this build.
+          2. For Change Fielder, choose the physical control you want (LB with
+             Ctrl+F1, or LT with Ctrl+F2), then press it until the fielder switches.
+             Press Ctrl+Enter immediately when it works.
+          3. Ctrl+F3, then press RT in real relay/cutoff opportunities until relay
+             works. Ctrl+Enter locks it.
+          4. Ctrl+F4 can do the same exhaustive single-button search for Back/View.
+             No manager-menu macro is synthesized.
 
-          TEST ONLY THESE TWO FIELDING ACTIONS
-          ------------------------------------
-          1. LB while fielding -> Change Fielder.
-          2. RT in a real relay/cutoff situation -> Relay/Cutoff.
+          The candidate search includes all useful DI button slots, both trigger
+          directions, plus the exact FIELD_SWITCH / RELAY keyboard inputs already
+          present in MVP's controller.cfg. The diagnostic log records every tested
+          candidate and every saved result.
 
-          Do not re-test the face-button numbering modes; they remain frozen.
-          Compatibility/runtime behavior remains on the verified RC1 path.
+          Compatibility/runtime behavior outside controller handling remains on the
+          verified RC1 path. Intro-video skipping remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.31-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.32-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.31-x86
+          name: mvp2005modern-launcher-v0.32-x86
           path: dist/
           if-no-files-found: error
