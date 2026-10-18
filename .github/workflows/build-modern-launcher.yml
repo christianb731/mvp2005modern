@@ -29,6 +29,7 @@ on:
       - 'patches/apply_controller_complete_gameplay_v25.py'
       - 'patches/apply_controller_back_r2_alias_v26.py'
       - 'patches/apply_controller_buttonized_modifiers_v27.py'
+      - 'patches/apply_controller_back_manager_macro_v28.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -81,6 +82,7 @@ jobs:
           python3 ../patches/apply_controller_complete_gameplay_v25.py
           python3 ../patches/apply_controller_back_r2_alias_v26.py
           python3 ../patches/apply_controller_buttonized_modifiers_v27.py
+          python3 ../patches/apply_controller_back_manager_macro_v28.py
           git diff --check
           git diff --stat
 
@@ -97,52 +99,53 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Discrete Trigger Controls v0.27
+          MVP Baseball 2005 Modern - Back Manager Shortcut v0.28
 
           STABLE CONTROLS ARE FROZEN
           --------------------------
-          A/B/X/Y, RB pitch 5, Start, L3 and the working stick behavior are unchanged.
+          A/B/X/Y, RB pitch 5, Start, L3 and stick behavior are unchanged.
+          RT remains the working R2/cutoff-relay control.
+          LB remains the working L1/quick-pickoff control.
 
-          WHAT CHANGED
-          ------------
-          The v0.26 log proved LT + face and LB + face are reaching MVP together,
-          but MVP is not treating the synthesized trigger axis as L2/R2. v0.27
-          stops using the trigger axis for these gameplay modifiers.
+          BACK / MANAGER MENU
+          -------------------
+          The v0.27 log proves Back and RT both reached MVP as logical R2 button 12.
+          RT works as R2 in the field, so translation is correct. MVP does not open
+          its pitching manager/bullpen strip from a bare R2 tap; the original control
+          is R2 plus D-pad left/right.
 
-          The controller now exposes 12 logical buttons:
-            LT          -> button 11 -> MVP L2 / PICK modifier
-            RT or Back  -> button 12 -> MVP R2 / manager-alignment modifier
+          v0.28 makes Back/View a one-button shortcut for that exact chord. A Back
+          press emits a short R2 + D-pad-left pulse so a normal tap should bring up
+          the manager/bullpen/dugout/alignment strip without requiring a second button.
+          Physical RT remains normal R2 and is not changed.
 
-          The old trigger axis is neutralized during gameplay so there is only one
-          interpretation path.
-
-          LB is now also bound directly to relay/cutoff, matching the requested
-          modern layout and a known legacy MVP PC controller profile.
-
-          IMPORTANT SETUP
-          ---------------
-          Open Controller Setup once and click Save to MVP. Do NOT recalibrate.
-          This one save is required because controller.cfg must change from the old
-          axis L2/R2 bindings to button 11/button 12 and advertise 12 buttons.
+          LT
+          --
+          LT remains MVP's original L2 / normal-pickoff modifier on logical button 11.
+          A tap by itself is expected to do nothing. With a runner on base, hold LT
+          and press B/Y/X for a normal pickoff to first/second/third. LB is the quicker
+          pickoff modifier and is already confirmed working.
 
           TEST
           ----
           1. Replace BOTH MVP2005Modern.exe and mvp2005fix.dll.
-          2. Controller Setup -> Save to MVP ONCE. Do not recalibrate.
-          3. Verify A/B/X/Y and RB still work.
-          4. With a runner on base: LT + B/Y/X for normal PICK.
-          5. While pitching: hold Back (or RT) + D-pad for manager/bullpen/alignment.
-          6. During a relay/cutoff situation: press LB.
+          2. Do NOT recalibrate and do NOT resave controller.cfg; v0.27 already wrote
+             the required 12-button profile.
+          3. Confirm the frozen face buttons/RB/Start still work.
+          4. While pitching, tap Back/View once. It should open/enter the manager menu.
+          5. Confirm RT still activates cutoff/relay while fielding.
+          6. If convenient, with a runner on first hold LT + B once. If that still has
+             no effect, LT can be treated as an unused spare in the final layout rather
+             than disturbing the controls that already work.
 
-          The diagnostic log remains enabled. A working v0.27 profile should show
-          number_of_buttons=12, L2=button 11, R2=button 12, and gameplay LT/RT as
-          OUT btn=[11]/[12] instead of trigger-axis motion.
+          Compatibility/runtime behavior outside controller handling remains on the
+          verified RC1 path. Intro-video skipping remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.27-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.28-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.27-x86
+          name: mvp2005modern-launcher-v0.28-x86
           path: dist/
           if-no-files-found: error
