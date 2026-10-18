@@ -1,14 +1,14 @@
 # MVP2005 Modern
 
-Compatibility, widescreen, controller, and launcher work for a user-owned PC installation of **MVP Baseball 2005** on modern Windows.
+Compatibility, widescreen, controller, launcher, and quality-of-life work for a user-owned PC installation of **MVP Baseball 2005** on modern Windows.
 
 MVP2005 Modern does **not** distribute `mvp2005.exe`, game assets, a no-CD executable, or a DRM bypass. The original SafeDisc/media verification flow remains in use through SafeDiscShim.
 
 ## Current status
 
-The Windows 11 compatibility runtime is at the verified **RC1** baseline. The current launcher preview is **v0.33**, with the v0.32 controller behavior intentionally frozen.
+The current integrated launcher/runtime build is **v0.42**. The compatibility runtime remains based on the verified RC1 baseline, with the v0.32 controller behavior intentionally frozen and later features layered on top.
 
-Verified runtime behavior:
+Verified behavior includes:
 
 - MVP Baseball 2005 launches on modern Windows with the original SafeDisc flow handled by SafeDiscShim;
 - dgVoodoo2 provides the Direct3D 8 / DirectDraw compatibility layer;
@@ -17,7 +17,9 @@ Verified runtime behavior:
 - frontend/menu and gameplay mouse coordinates are handled separately and correctly;
 - repeated menu -> gameplay -> menu transitions recover input correctly;
 - Alt-Tab works without MVP minimizing itself or stealing focus back;
-- the upstream large-drive save fix remains enabled.
+- the upstream large-drive save fix remains enabled;
+- optional Large Address Aware support gives the 32-bit game access to the larger user virtual-address space on 64-bit Windows;
+- Skip Intro automatically advances through the EA Sports and MVP startup movies without modifying the installed movie files.
 
 The final known-good pre-cleanup compatibility runtime is preserved in Git history at:
 
@@ -34,13 +36,12 @@ GitHub Actions pins upstream `ostrich/mvp2005fix` at:
 3. Run `MVP2005Modern.exe`.
 4. Let the launcher reuse the detected/remembered installation, or browse to the original `mvp2005.exe`.
 5. Click **Verify / Repair** once.
-6. Choose a resolution and click **Launch Game**.
+6. Choose a resolution and optional features such as Large Address Aware and Skip Intro.
+7. Click **Launch Game**.
 
 The launcher keeps its own configuration in `mvp2005fix.ini` beside `MVP2005Modern.exe`.
 
-## v0.33 setup cleanup
-
-v0.33 makes the compatibility setup path more suitable for normal installations, especially when MVP Baseball 2005 is installed under `Program Files`.
+## Compatibility setup
 
 ### Verify / Repair
 
@@ -63,20 +64,9 @@ v0.33 makes the compatibility setup path more suitable for normal installations,
 
 ### Protected game folders
 
-The launcher disables Windows file virtualization and probes the **real** selected game directory. If that directory is not writable, only the local dgVoodoo repair step is relaunched with administrator rights. The whole launcher does not need to run elevated.
+The launcher disables Windows file virtualization and probes the **real** selected game directory. If that directory is not writable, only the local repair step that requires access is relaunched with administrator rights. The whole launcher does not need to run elevated.
 
-After the elevated helper returns, the parent launcher verifies that the expected files and validated dgVoodoo settings are actually present in the real game folder instead of trusting only the helper's exit code.
-
-### Setup health display
-
-The launcher now reports useful setup state instead of a generic compatibility message, including:
-
-- SafeDiscShim missing;
-- dgVoodoo wrapper files missing;
-- dgVoodoo present but not using the validated MVP profile;
-- compatibility stack ready.
-
-The v0.33 clean-machine path is compiled and CI-tested, but it should still be treated as a preview until it has been exercised on a fresh Windows 10/11 machine with neither external dependency preinstalled.
+After an elevated helper returns, the parent launcher verifies that the expected files/settings are actually present instead of trusting only the helper's exit code.
 
 ## Required dgVoodoo profile
 
@@ -112,7 +102,7 @@ The launcher owns these tested MVP-specific compatibility settings so users do n
 
 ## Runtime configuration
 
-For a 16:9 output, the tested horizontal projection scale is `0.75`. Resolution, widescreen, borderless mode, and the large-drive save fix are written through the launcher.
+For a 16:9 output, the tested horizontal projection scale is `0.75`. Resolution, widescreen, borderless mode, the large-drive save fix, Large Address Aware intent, and Skip Intro are written through the launcher.
 
 General runtime logging is normally off and can be enabled with:
 
@@ -145,7 +135,7 @@ The live learner remains available as a fallback for controls that need machine/
 - `Ctrl+Enter` — lock and persist the candidate that works;
 - `Ctrl+Backspace` — clear the selected learned mapping.
 
-Normal play no longer creates the very large controller diagnostic log. It is opt-in with:
+Normal play no longer creates the large controller diagnostic log. It is opt-in with:
 
 ```ini
 [ControllerDebug]
@@ -154,9 +144,30 @@ Logging=1
 
 The integrated **Controller Setup** window remains available for generating/editing an MVP `controller.cfg`, but users with a working v0.32 learned setup should not recalibrate just for normal use.
 
-## Intro videos
+## Large Address Aware
 
-Intro-video skipping is deferred. The visible launcher option remains removed/disabled, normal settings saves do not modify the movie files, and the compatibility runtime does not depend on intro skipping.
+The launcher can enable the PE32 `IMAGE_FILE_LARGE_ADDRESS_AWARE` flag on the selected `mvp2005.exe` and keeps a one-time executable backup under `MVP2005Modern.Backup\executable` before changing it.
+
+The launcher verifies the PE header before writing, changes only the LAA characteristics bit, and verifies the result afterward. On 64-bit Windows the validated game process receives the expanded user virtual-address range.
+
+## Skip Intro
+
+Skip Intro is a supported v0.42 launcher feature.
+
+When **Skip EA Sports / MVP intro videos** is enabled:
+
+- the installed `easports.vp6` and `mvpintro.vp6` files are never modified;
+- the runtime validates their Electronic Arts VP6/ADPCM container structure;
+- short disposable cached copies are generated in `MVP2005Modern.IntroCache`;
+- only the two startup movie opens are redirected to those cached files;
+- one guarded automatic Skip input is sent after the first cached movie starts;
+- input is sent only if an MVP window still owns the foreground;
+- only one automatic input is scheduled per process, avoiding a delayed click on the main menu;
+- the cursor is not moved.
+
+Unchecking Skip Intro restores normal startup movie behavior on the next launch. The cache directory can be deleted at any time and will be regenerated from the user's installed movies when needed.
+
+`MVP2005Modern-Intro.log` remains available for support, but v0.42 uses concise production logging: healthy launches record only startup identity, cache-ready summaries, and final automatic-skip success. Validation failures, fallbacks, focus aborts, and input failures retain detailed diagnostics.
 
 ## Pinned external components
 
@@ -168,11 +179,11 @@ Intro-video skipping is deferred. The visible launcher option remains removed/di
 - **SafeDiscShim** — compatibility for the original game's SafeDisc launch flow;
 - **dgVoodoo2** — modern Direct3D/DirectDraw wrapper;
 - **mvp2005fix** — upstream resolution, widescreen, and large-drive compatibility work;
-- **MVP2005 Modern runtime patches** — true borderless presentation, phase-aware mouse handling, Alt-Tab fixes, and controller translation;
-- **MVP2005 Modern launcher** — setup verification/repair, path detection, resolution, controller configuration, and launch orchestration.
+- **MVP2005 Modern runtime patches** — true borderless presentation, phase-aware mouse handling, Alt-Tab fixes, controller translation, Large Address Aware diagnostics, and Skip Intro;
+- **MVP2005 Modern launcher** — setup verification/repair, path detection, resolution, controller configuration, feature settings, and launch orchestration.
 
 ## Repository build structure
 
-`patches/apply_production_rc1.py` is the compatibility-runtime baseline. The launcher/controller work is currently layered afterward by the build workflow so the history of experiments remains reproducible.
+`patches/apply_production_rc1.py` is the compatibility-runtime baseline. The launcher/controller/features are layered afterward by the build workflow so the history of experiments remains reproducible.
 
-The next cleanup step is to consolidate the proven launcher/controller patches into a smaller production patch set once v0.33 has been exercised on Windows. After that, the planned product work is profile/mod management: isolated profiles, baseline manifests, backup/restore, activation/deactivation, and presets such as Vanilla, modern rosters, and Total Classics while keeping the base installation recoverable.
+The controller behavior remains frozen at v0.32 while later setup, LAA, and Skip Intro layers are applied independently. The next larger product area can therefore move on from startup compatibility work without destabilizing the known-good controller mapping baseline.
