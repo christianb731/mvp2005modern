@@ -4,41 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'patches/apply_production_rc1.py'
-      - 'patches/apply_skip_intro_runtime_v3.py'
-      - 'patches/apply_modern_launcher_v1.py'
-      - 'patches/apply_modern_launcher_v2.py'
-      - 'patches/apply_modern_launcher_v3.py'
-      - 'patches/apply_controller_configurator_v4.py'
-      - 'patches/apply_controller_configurator_v5.py'
-      - 'patches/apply_controller_configurator_v6.py'
-      - 'patches/apply_controller_configurator_v8.py'
-      - 'patches/apply_controller_action_layout_v12.py'
-      - 'patches/apply_controller_runtime_remap_v13.py'
-      - 'patches/apply_controller_usability_v14.py'
-      - 'patches/apply_controller_canonical_xbox_v15.py'
-      - 'patches/apply_controller_xinput_bridge_v16.py'
-      - 'patches/apply_controller_full_diagnostics_v17.py'
-      - 'patches/apply_controller_frontend_gameplay_split_v18.py'
-      - 'patches/apply_controller_x_quarantine_v19.py'
-      - 'patches/apply_controller_zero_based_profile_v20.py'
-      - 'patches/apply_controller_one_based_final_v21.py'
-      - 'patches/apply_controller_buffered_input_v22.py'
-      - 'patches/apply_controller_empirical_hybrid_v23.py'
-      - 'patches/apply_controller_empirical_rb_v24.py'
-      - 'patches/apply_controller_complete_gameplay_v25.py'
-      - 'patches/apply_controller_back_r2_alias_v26.py'
-      - 'patches/apply_controller_buttonized_modifiers_v27.py'
-      - 'patches/apply_controller_back_manager_macro_v28.py'
-      - 'patches/apply_controller_no_macro_cleanup_v29.py'
-      - 'patches/apply_controller_lt_field_switch_v30.py'
-      - 'patches/apply_controller_restore_native_fielding_v31.py'
-      - 'patches/apply_controller_live_learning_v32.py'
-      - 'patches/apply_setup_cleanup_v33.py'
-      - 'patches/apply_setup_cleanup_v33_fix.py'
-      - 'patches/apply_large_address_aware_v34.py'
-      - 'patches/apply_large_address_aware_v34_fix.py'
-      - 'patches/apply_skip_intro_diagnostic_v35.py'
+      - 'patches/**'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -48,7 +14,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout MVP2005 Modern
         uses: actions/checkout@v4
@@ -63,7 +28,7 @@ jobs:
           git clone https://github.com/ostrich/mvp2005fix.git upstream
           git -C upstream checkout 1c0dae9b030a8fb66648655c8d14043af1ead676
 
-      - name: Apply RC1 runtime and Modern launcher
+      - name: Apply MVP2005 Modern patch stack
         run: |
           cd upstream
           python3 ../patches/apply_production_rc1.py
@@ -101,6 +66,7 @@ jobs:
           python3 ../patches/apply_large_address_aware_v34.py
           python3 ../patches/apply_large_address_aware_v34_fix.py
           python3 ../patches/apply_skip_intro_diagnostic_v35.py
+          python3 ../patches/apply_skip_intro_trace_v36.py
           git diff --check
           git diff --stat
 
@@ -117,84 +83,51 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.35 - Diagnostic Skip Intro Preview
+          MVP Baseball 2005 Modern v0.36 - Skip Intro Callsite Trace
 
-          QUICK START
+          PURPOSE
+          -------
+          v0.35 proved that returning ERROR_FILE_NOT_FOUND for easports.vp6 causes MVP
+          to retry the same movie request and hang. v0.36 therefore DOES NOT block,
+          rename, replace, truncate, or delete either intro movie.
+
+          TEST
+          ----
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll with these files.
+          2. Keep your working v0.34/v0.35 settings, including Large Address Aware.
+          3. Check "Skip EA Sports / MVP intro videos".
+          4. Launch MVP and allow the intro movies to play normally this time.
+          5. Reach the main menu, then exit.
+          6. Send MVP2005Modern-Intro.log.
+
+          DIAGNOSTICS
           -----------
-          1. Keep MVP2005Modern.exe and mvp2005fix.dll together in a normal writable
-             folder such as Documents or a dedicated Games tools folder.
-          2. Run MVP2005Modern.exe.
-          3. Select/reuse your original mvp2005.exe.
-          4. Leave the working v0.34 settings as desired, including Large Address Aware.
-          5. Enable "Skip EA Sports / MVP intro videos" and launch the game.
+          With the checkbox enabled, v0.36 records the exact VP6 CreateFile caller,
+          160 bytes of machine code surrounding that return address, and up to 24 stack
+          frames with module-relative offsets. File access is then passed through to
+          Windows normally, so this diagnostic build should not reproduce the v0.35
+          missing-file retry hang.
 
-          SKIP INTRO TEST
-          ---------------
-          This preview does NOT rename, replace, truncate, or delete any VP6 movie.
-          The original easports.vp6 and mvpintro.vp6 files remain untouched.
+          The goal is to identify the higher-level startup-movie/playback routine and
+          patch its branch/return rather than interfering with VP6 file I/O.
 
-          When Skip Intro is enabled, the injected runtime first records the result of
-          the previously tested internal ENABLE_FRONTEND_MOVIES patch. It also watches
-          the existing CreateFileA/CreateFileW runtime hooks. Exact attempts to open
-          easports.vp6 or mvpintro.vp6 are logged and returned as ERROR_FILE_NOT_FOUND.
-          The goal is to let MVP take its normal missing-optional-movie path instead of
-          feeding the VP6 decoder an invalid/empty movie.
-
-          A dedicated MVP2005Modern-Intro.log is created next to the launcher/runtime.
-          It records:
-          - whether the old internal movie-setting signature was found and patched;
-          - each exact EA Sports/MVP intro VP6 open request;
-          - whether the request used CreateFileA or CreateFileW;
-          - access/share/disposition parameters;
-          - the calling module and offset/RVA;
-          - the explicit ERROR_FILE_NOT_FOUND interception.
-
-          If the game still plays the intros, the log tells us that the movie path is
-          bypassing these Win32 file opens. If the game reacts badly to a missing file,
-          the caller offset gives us a much narrower place to inspect/patch next.
-
-          LARGE ADDRESS AWARE
-          -------------------
-          The working v0.34 LAA implementation remains unchanged. It validates the PE32
-          header, backs up mvp2005.exe once, toggles only IMAGE_FILE_LARGE_ADDRESS_AWARE,
-          and records launcher/runtime verification in MVP2005Modern-LAA.log.
-
-          CONTROLLER / COMPATIBILITY
-          --------------------------
-          Controller behavior remains frozen at the working v0.32 persistent learner.
-          SafeDiscShim 0.9.0, dgVoodoo2 2.87.5, borderless behavior, resolution fixes,
-          and the v0.33 permissions-aware Verify / Repair path are unchanged.
-          Controller diagnostic logging remains OFF unless explicitly enabled with
-          [ControllerDebug] Logging=1 in mvp2005fix.ini.
-
-          SAFETY
-          ------
-          Unchecking Skip Intro restores normal movie access immediately on the next
-          launch. No game assets are modified by this feature.
+          Existing SafeDiscShim, dgVoodoo, borderless, resolution, controller, setup,
+          and Large Address Aware behavior is otherwise unchanged.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.35 component manifest
-
-          upstream mvp2005fix commit:
-          1c0dae9b030a8fb66648655c8d14043af1ead676
-
-          SafeDiscShim v0.9.0 installer SHA-256:
-          b4c355ec63047a09c20c286c083fcad1031d47a2c17eac0de12b96d377ec369f
-
-          dgVoodoo2 v2.87.5 ZIP SHA-256:
-          5ffde6927f7355ca3fdd5d785b581256a8e6539fa13e395a891ade6ba1040850
-
-          Runtime baseline: MVP2005 Modern RC1 compatibility path
-          Controller baseline: v0.32 persistent live learner / empirical mapping
-          Setup layer: v0.33 permissions-aware Verify / Repair
-          Executable option: v0.34 reversible Large Address Aware PE32 flag + diagnostics
-          Intro experiment: v0.35 runtime missing-file interception + dedicated diagnostics
+          MVP2005 Modern v0.36 component manifest
+          upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
+          Controller baseline: v0.32
+          Setup layer: v0.33
+          Large Address Aware: v0.34
+          Intro missing-file experiment: v0.35 (superseded; known to hang)
+          Intro callsite/machine-code/stack trace: v0.36
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.35-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.36-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.35-x86
+          name: mvp2005modern-launcher-v0.36-x86
           path: dist/
           if-no-files-found: error
