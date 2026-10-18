@@ -72,6 +72,7 @@ jobs:
           python3 ../patches/apply_skip_intro_ea_trim_v39.py
           python3 ../patches/apply_skip_intro_sccl_v40.py
           python3 ../patches/apply_skip_intro_autoclick_v41.py
+          python3 ../patches/apply_skip_intro_production_v42.py
           git diff --check
           git diff --stat
 
@@ -81,74 +82,55 @@ jobs:
       - name: Build Windows x86 product
         run: make -C upstream release
 
-      - name: Package launcher preview
+      - name: Package launcher
         run: |
           mkdir -p dist
           cp upstream/release/mvp2005fix.exe dist/MVP2005Modern.exe
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.41 - Guarded Automatic Skip Intro Preview
+          MVP Baseball 2005 Modern v0.42
 
-          WHAT v0.40 PROVED
-          -----------------
-          The v0.40 cache is structurally valid: both trimmed movies build, redirect,
-          and play without crashing, and SCCl is now endian-correct. However, MVP still
-          waits for its normal user Skip input rather than treating the short SCEl-ended
-          stream as an automatic movie completion.
+          SKIP INTRO
+          ----------
+          Skip Intro is now a normal supported launcher feature.
 
-          WHAT v0.41 DOES
-          ---------------
-          v0.41 keeps the known-good v0.40 trimmed movie cache unchanged and reproduces
-          the user-proven Skip input automatically once, during the first EA Sports
-          movie. It does not move the cursor.
+          When "Skip EA Sports / MVP intro videos" is enabled, MVP2005 Modern:
+          - builds disposable short cached copies from the user's installed intro movies;
+          - validates the EA VP6/ADPCM container and preserves the original files;
+          - redirects only the two startup intro movie opens to those cached copies;
+          - sends one guarded Skip input after the first cached movie starts;
+          - injects input only while an MVP window owns the foreground;
+          - schedules the input only once so no delayed click can land on the main menu.
 
-          Safety guards:
-          - input is scheduled only after the cached easports.vp6 opens successfully;
-          - only one automatic click can be scheduled per process;
-          - after a short delay, the foreground window must belong to the MVP process;
-          - if another application has focus, no input is injected;
-          - the left button is held briefly across multiple game input polls, matching
-            the behavior of a physical click more closely than an instantaneous event;
-          - no second delayed click is scheduled, avoiding a possible click on the menu.
+          The mouse cursor is never moved. Unchecking Skip Intro restores normal startup
+          movie behavior on the next launch. MVP2005Modern.IntroCache may be deleted at
+          any time and will be regenerated from the installed movies when needed.
 
-          TEST
-          ----
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.41 files.
-          2. Delete MVP2005Modern.IntroCache once before testing.
-          3. Enable "Skip EA Sports / MVP intro videos".
-          4. Launch MVP and do not click during startup.
-          5. Report whether it reaches the main menu automatically.
-          6. Send MVP2005Modern-Intro.log.
-
-          DIAGNOSTICS
-          -----------
-          Look for AUTO SKIP schedule/thread/target, left_down, left_up, and PASS lines.
-          The target line records the foreground MVP window and cursor position; no
-          cursor movement is generated. Any focus mismatch is logged as an abort.
+          LOGGING
+          -------
+          MVP2005Modern-Intro.log is intentionally concise in v0.42. A healthy launch
+          records startup identity, one cache-ready line per movie, and the final
+          automatic-skip success. Detailed rejection, fallback, focus-abort, and input
+          failure messages remain enabled for troubleshooting.
 
           Existing SafeDiscShim, dgVoodoo, borderless, resolution, controller, setup,
-          Large Address Aware, and the validated EA cache behavior are otherwise unchanged.
+          Large Address Aware, and save-fix behavior is unchanged from the verified
+          v0.41 baseline.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.41 component manifest
+          MVP2005 Modern v0.42 component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
           Controller baseline: v0.32
           Setup layer: v0.33
           Large Address Aware: v0.34
-          Intro missing-file experiment: v0.35 (superseded; known to hang)
-          Intro callsite trace: v0.36
-          Intro format probe: v0.37
-          Intro metadata-only experiment: v0.38 (superseded; crash)
-          Intro self-consistent EA trim: v0.39
-          Intro SCCl endian correction: v0.40
-          Guarded automatic Skip input: v0.41
+          Skip Intro production behavior: v0.42 (validated v0.41 mechanics)
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.41-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.42-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.41-x86
+          name: mvp2005modern-launcher-v0.42-x86
           path: dist/
           if-no-files-found: error
