@@ -25,6 +25,7 @@ on:
       - 'patches/apply_controller_one_based_final_v21.py'
       - 'patches/apply_controller_buffered_input_v22.py'
       - 'patches/apply_controller_empirical_hybrid_v23.py'
+      - 'patches/apply_controller_empirical_rb_v24.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -73,6 +74,7 @@ jobs:
           python3 ../patches/apply_controller_one_based_final_v21.py
           python3 ../patches/apply_controller_buffered_input_v22.py
           python3 ../patches/apply_controller_empirical_hybrid_v23.py
+          python3 ../patches/apply_controller_empirical_rb_v24.py
           git diff --check
           git diff --stat
 
@@ -89,49 +91,53 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.23
+          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.24
 
           WHAT CHANGED
           ------------
-          This build stops treating one-based vs zero-based as a single global choice.
-          It uses only control positions that the user's actual tests have already shown
-          to work, simultaneously, during gameplay:
+          v0.23 produced the first stable gameplay face-button layout:
+            A -> home
+            B -> first
+            X -> third
+            Y -> second
+          Start also pauses correctly and L3 no longer pauses.
 
-            A -> slot 0   (worked in F8)
-            B -> slot 1   (worked in F8)
-            slot 2        intentionally unused; this is the recurring manager-menu slot
-            X -> slot 3   (worked in F7)
-            Y -> slot 4   (worked in F7)
+          v0.24 leaves all of that untouched.
 
-          Back/View is suppressed during gameplay because the user's tests repeatedly
-          showed its slot firing pitch 5 instead of the intended action. Frontend/menu
-          input stays on the normal canonical mapping, so navigation is unchanged.
+          Earlier testing directly showed that gameplay slot 7 fires pitch 5 when
+          Back/View occupies that slot. v0.23 already suppresses physical Back during
+          gameplay, so slot 7 is free. v0.24 routes physical RB to that empirically
+          proven pitch-5 slot:
 
-          v22's GetDeviceData theory is retired. The v0.22 diagnostic log contained
-          zero BUFFERED BUTTON entries across the entire session, so that path was not
-          actually being consumed in the failing case. v0.23 no longer patches it.
+            RB -> gameplay slot 7 -> pitch 5
 
-          The diagnostic STATE line now includes phase=0/1 so one log immediately shows
-          whether the empirical gameplay map was active for each press.
+          Physical Back remains suppressed during gameplay and works normally in the
+          frontend. LB is unchanged.
+
+          NOTE ON INTENTIONAL HIT BATTER
+          ------------------------------
+          The loaded controller.cfg assigns intentional hit batter to button 9/L3,
+          not LB. The v0.23 diagnostic log also captured L3 (slot 9) pressed at the
+          same time as LB during the sequence where the hit-batter behavior was seen.
+          For that reason this build does NOT change LB yet.
 
           TEST
           ----
           1. Replace BOTH MVP2005Modern.exe and mvp2005fix.dll.
-          2. Do not recalibrate and do not resave controller.cfg for this test.
-          3. Launch normally; leave the default mode alone.
-          4. In gameplay test A/B/X/Y first, then Start, LB/RB, L3/R3 and triggers.
-          5. Back should no longer throw a pitch during gameplay; it is intentionally
-             suppressed there for this build.
-          6. If anything is still wrong, upload mvp2005controller_diagnostic.log once.
+          2. Do not recalibrate or resave controller.cfg.
+          3. Confirm A/B/X/Y and Start still work exactly as in v0.23.
+          4. While pitching, verify RB selects/throws the fifth pitch.
+          5. Check LB once and twice. If an intentional HBP happens, note whether L3
+             was clicked at the same time; the diagnostic log records both controls.
 
           Compatibility/runtime behavior outside controller handling remains on the
           verified RC1 path. Intro-video skipping remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.23-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.24-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.23-x86
+          name: mvp2005modern-launcher-v0.24-x86
           path: dist/
           if-no-files-found: error
