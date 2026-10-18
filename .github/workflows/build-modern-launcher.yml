@@ -37,6 +37,7 @@ on:
       - 'patches/apply_setup_cleanup_v33.py'
       - 'patches/apply_setup_cleanup_v33_fix.py'
       - 'patches/apply_large_address_aware_v34.py'
+      - 'patches/apply_large_address_aware_v34_fix.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -97,6 +98,7 @@ jobs:
           python3 ../patches/apply_setup_cleanup_v33.py
           python3 ../patches/apply_setup_cleanup_v33_fix.py
           python3 ../patches/apply_large_address_aware_v34.py
+          python3 ../patches/apply_large_address_aware_v34_fix.py
           git diff --check
           git diff --stat
 
