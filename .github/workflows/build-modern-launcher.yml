@@ -71,6 +71,7 @@ jobs:
           python3 ../patches/apply_skip_intro_ea_header_v38.py
           python3 ../patches/apply_skip_intro_ea_trim_v39.py
           python3 ../patches/apply_skip_intro_sccl_v40.py
+          python3 ../patches/apply_skip_intro_autoclick_v41.py
           git diff --check
           git diff --stat
 
@@ -87,66 +88,67 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.40 - SCCl Endian-Correct Skip Intro Preview
+          MVP Baseball 2005 Modern v0.41 - Guarded Automatic Skip Intro Preview
 
-          WHAT v0.39 PROVED
+          WHAT v0.40 PROVED
           -----------------
-          The physically trimmed EA VP6/ADPCM cache is playable and safe: both intro
-          movies load from the cache, and manually clicking Skip immediately advances
-          through them. However, the movies did not end automatically.
+          The v0.40 cache is structurally valid: both trimmed movies build, redirect,
+          and play without crashing, and SCCl is now endian-correct. However, MVP still
+          waits for its normal user Skip input rather than treating the short SCEl-ended
+          stream as an automatic movie completion.
 
-          WHAT v0.40 FIXES
-          ----------------
-          v0.39 exposed an endian bug in the EA SCCl audio count block. SCCl's 4-byte
-          payload is stored big-endian even though PC EA chunk-size fields are little-
-          endian. v0.39 therefore logged impossible counts such as 2852126720 and
-          4261937152 and wrote the replacement count in the wrong byte order.
+          WHAT v0.41 DOES
+          ---------------
+          v0.41 keeps the known-good v0.40 trimmed movie cache unchanged and reproduces
+          the user-proven Skip input automatically once, during the first EA Sports
+          movie. It does not move the cursor.
 
-          v0.40 keeps the successful self-consistent media trim unchanged, but reads and
-          writes the SCCl SCDl-block count as big-endian. For the observed originals,
-          those raw values decode to sane counts such as 170 and 2302. The trimmed cache
-          writes the exact retained SCDl block count and verifies it before use.
+          Safety guards:
+          - input is scheduled only after the cached easports.vp6 opens successfully;
+          - only one automatic click can be scheduled per process;
+          - after a short delay, the foreground window must belong to the MVP process;
+          - if another application has focus, no input is injected;
+          - the left button is held briefly across multiple game input polls, matching
+            the behavior of a physical click more closely than an instantaneous event;
+          - no second delayed click is scheduled, avoiding a possible click on the menu.
 
           TEST
           ----
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.40 files.
-          2. Delete MVP2005Modern.IntroCache before the first v0.40 test.
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.41 files.
+          2. Delete MVP2005Modern.IntroCache once before testing.
           3. Enable "Skip EA Sports / MVP intro videos".
-          4. Launch MVP and DO NOT click during the intros.
-          5. Report whether both intros now end automatically and reach the main menu.
-          6. Send MVP2005Modern-Intro.log after the run.
+          4. Launch MVP and do not click during startup.
+          5. Report whether it reaches the main menu automatically.
+          6. Send MVP2005Modern-Intro.log.
 
           DIAGNOSTICS
           -----------
-          Look for "EA TRIM SCCl blocks_be=...->... verify_be=...". A correct build
-          should show sane original block counts and verify_be equal to the retained
-          audio-block count. All v0.39 chunk, duration, cache, redirect, and fallback
-          diagnostics remain enabled.
+          Look for AUTO SKIP schedule/thread/target, left_down, left_up, and PASS lines.
+          The target line records the foreground MVP window and cursor position; no
+          cursor movement is generated. Any focus mismatch is logged as an abort.
 
-          SAFETY / REVERSIBILITY
-          ----------------------
-          The installed .vp6 files are never modified. The IntroCache is disposable and
-          regenerated from the user's own originals. Any validation failure falls back
-          to the original movie.
+          Existing SafeDiscShim, dgVoodoo, borderless, resolution, controller, setup,
+          Large Address Aware, and the validated EA cache behavior are otherwise unchanged.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.40 component manifest
+          MVP2005 Modern v0.41 component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
           Controller baseline: v0.32
           Setup layer: v0.33
           Large Address Aware: v0.34
           Intro missing-file experiment: v0.35 (superseded; known to hang)
           Intro callsite trace: v0.36
-          Intro format probe: v0.37 (established EA Multimedia container)
-          Intro metadata-only duration experiment: v0.38 (superseded; white-screen/crash)
-          Intro self-consistent EA VP6/ADPCM prefix trim: v0.39
-          Intro SCCl big-endian count correction: v0.40
+          Intro format probe: v0.37
+          Intro metadata-only experiment: v0.38 (superseded; crash)
+          Intro self-consistent EA trim: v0.39
+          Intro SCCl endian correction: v0.40
+          Guarded automatic Skip input: v0.41
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.40-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.41-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.40-x86
+          name: mvp2005modern-launcher-v0.41-x86
           path: dist/
           if-no-files-found: error
