@@ -27,6 +27,7 @@ on:
       - 'patches/apply_controller_empirical_hybrid_v23.py'
       - 'patches/apply_controller_empirical_rb_v24.py'
       - 'patches/apply_controller_complete_gameplay_v25.py'
+      - 'patches/apply_controller_back_r2_alias_v26.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -77,6 +78,7 @@ jobs:
           python3 ../patches/apply_controller_empirical_hybrid_v23.py
           python3 ../patches/apply_controller_empirical_rb_v24.py
           python3 ../patches/apply_controller_complete_gameplay_v25.py
+          python3 ../patches/apply_controller_back_r2_alias_v26.py
           git diff --check
           git diff --stat
 
@@ -93,66 +95,75 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Complete Controller Gameplay Map v0.25
+          MVP Baseball 2005 Modern - Stable Contextual Controller Map v0.26
 
-          STABLE CONTROLS - DO NOT RECALIBRATE
-          -------------------------------------
-          v0.23/v0.24 established a stable empirical layout. v0.25 keeps every
-          confirmed working control unchanged and fills in the remaining gameplay
-          functions using the original MVP control scheme plus the slots this game
-          has actually demonstrated on this system.
+          WHAT CHANGED
+          ------------
+          The v0.24 baseline remains frozen:
+            A/B/X/Y = correct face-button baseball actions
+            RB      = pitch 5
+            Start   = pause
+            L3      = no longer pauses
 
-          PRIMARY CONTROLS
-          ----------------
-          A     = pitch 1 / throw home / normal swing
-          B     = pitch 2 / throw first
-          X     = pitch 3 / throw third
-          Y     = pitch 4 / throw second
-          RB    = pitch 5
-          Start = pause
+          v0.25 incorrectly routed Back/View to logical slot 2 as a manager-menu
+          shortcut. The user's test proved that slot produces BUNT in this context.
+          v0.26 permanently disables that shortcut.
 
-          REMAINING GAMEPLAY CONTROLS
-          ---------------------------
-          Back/View = manager / bullpen / dugout menu shortcut
-                      (uses the empirically-proven manager-menu slot)
-          LT        = PICK / normal pickoff modifier; hold LT + base button
-          LB        = quick pickoff modifier; hold LB + base button
-                      also field-switch / advance-all-runners as appropriate
-          RT        = relay/cutoff throw and original R2 alignment/menu modifier
-          L3        = pitch history; LB + L3 intentionally hits batter
-          R3        = bunt; LB + R3 intentional walk
-          D-pad     = menu/alignment choices and runner destinations
-          Right stick = fielding dives/jumps/slides and baserunning return/slides
+          MVP's original shoulder/trigger controls are contextual. v0.26 keeps them
+          that way and makes Back/View a SECOND R2 input instead of a fake button:
 
-          OTHER ORIGINAL MVP COMBOS
-          -------------------------
-          LB + A = pitchout
-          LB + B/Y/X = quick pickoff to first/second/third
+            LB / L1 = change fielder, advance all runners, quick-pickoff modifier,
+                      pitchout / intentional-action modifier
+            LT / L2 = normal PICK/pickoff modifier; also batting-box movement
+            RT / R2 = cutoff/relay; hold with D-pad for alignment and
+                      bullpen/dugout/manager controls
+            Back    = alias of RT/R2 during gameplay (same cutoff/menu functions)
+
+          IMPORTANT: manager/alignment and PICK are not standalone tap actions.
+
+          PITCHING COMBOS
+          ---------------
           LT + B/Y/X = normal pickoff to first/second/third
-          LB + L3 = intentional hit batter
-          LB + R3 = intentional walk
+          LB + B/Y/X = quick pickoff to first/second/third
+          LB + A     = pitchout
+          LB + L3    = intentionally hit batter
+          LB + R3    = intentional walk
+          L3 + LB/RB = pitch history / toggle at-bats
+
+          MANAGER / ALIGNMENT
+          -------------------
+          Hold RT (or Back/View) + D-pad to access the R2 manager/alignment/
+          bullpen/dugout functions. Back alone is intentionally not a button action.
+
+          FIELDING / BASERUNNING
+          ----------------------
+          LB = change fielder
+          RT or Back = cutoff/relay
+          LB = advance all runners
+          RB = retreat all runners where MVP accepts the same logical pitch-5/R1 input
+          Right stick = dives/jumps/slides and manual baserunning returns/slides
+          D-pad = runner destinations and R2 menu/alignment choices
 
           TEST
           ----
           1. Replace BOTH MVP2005Modern.exe and mvp2005fix.dll.
           2. Do NOT recalibrate and do NOT resave controller.cfg.
           3. Confirm A/B/X/Y, RB, Start and L3 remain correct.
-          4. While pitching, press Back/View and verify the manager/bullpen/dugout
-             menu opens.
-          5. With a runner on base, hold LT and press the base button to test the
-             on-screen PICK function. Also test LB + base for the quick pickoff.
-          6. Test RT on a relay/cutoff situation if convenient, plus R3 and the
-             right stick. Upload the diagnostic log only if one of these remaining
-             controls behaves differently.
+          4. With a runner on base, HOLD LT and press B/Y/X for the PICK action.
+          5. HOLD RT + D-pad while pitching for manager/alignment/bullpen/dugout.
+             Back/View + D-pad should act identically as the modern shortcut.
+          6. In a cutoff situation, use RT (or Back/View) for cutoff/relay.
+          7. LB is intentionally NOT also mapped to cutoff because original L1/LB
+             already owns change-fielder, advance-all and pitching modifier actions.
 
           Compatibility/runtime behavior outside controller handling remains on the
           verified RC1 path. Intro-video skipping remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.25-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.26-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.25-x86
+          name: mvp2005modern-launcher-v0.26-x86
           path: dist/
           if-no-files-found: error
