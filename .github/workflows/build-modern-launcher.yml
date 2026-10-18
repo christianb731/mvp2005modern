@@ -24,6 +24,7 @@ on:
       - 'patches/apply_controller_zero_based_profile_v20.py'
       - 'patches/apply_controller_one_based_final_v21.py'
       - 'patches/apply_controller_buffered_input_v22.py'
+      - 'patches/apply_controller_empirical_hybrid_v23.py'
       - '.github/workflows/build-modern-launcher.yml'
   workflow_dispatch:
 
@@ -71,6 +72,7 @@ jobs:
           python3 ../patches/apply_controller_zero_based_profile_v20.py
           python3 ../patches/apply_controller_one_based_final_v21.py
           python3 ../patches/apply_controller_buffered_input_v22.py
+          python3 ../patches/apply_controller_empirical_hybrid_v23.py
           git diff --check
           git diff --stat
 
@@ -87,53 +89,49 @@ jobs:
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.22
+          MVP Baseball 2005 Modern - Controller Fix + Diagnostics v0.23
 
-          WHAT v0.22 FIXES
-          ----------------
-          The controller work was remapping IDirectInputDevice::GetDeviceState, but
-          MVP 2005 also consumes the legacy buffered GetDeviceData event stream.
-          Our old v0.10 diagnostics only began seeing the user's real button presses
-          after GetDeviceData was hooked; that hook was not carried into the later
-          production remapper.
+          WHAT CHANGED
+          ------------
+          This build stops treating one-based vs zero-based as a single global choice.
+          It uses only control positions that the user's actual tests have already shown
+          to work, simultaneously, during gameplay:
 
-          This explains the repeated impossible-looking behavior: the diagnostic OUT
-          state could contain only the intended logical button while MVP still saw an
-          unmodified raw button event through the second DirectInput API and opened a
-          menu, paused, or fired pitch 5 from the wrong physical control.
+            A -> slot 0   (worked in F8)
+            B -> slot 1   (worked in F8)
+            slot 2        intentionally unused; this is the recurring manager-menu slot
+            X -> slot 3   (worked in F7)
+            Y -> slot 4   (worked in F7)
 
-          v0.22 keeps the v0.21 canonical profile and native XInput state synthesis,
-          but now normalizes BOTH input paths:
-            - GetDeviceState: canonical logical controller state
-            - GetDeviceData: buffered button offsets remapped to the same logical slots
+          Back/View is suppressed during gameplay because the user's tests repeatedly
+          showed its slot firing pitch 5 instead of the intended action. Frontend/menu
+          input stays on the normal canonical mapping, so navigation is unchanged.
 
-          Default F7 mapping remains:
-            A/B/X/Y -> buttons 1/2/3/4
-            LB/RB -> 5/6
-            View/Start -> 7/8
-            L3/R3 -> 9/10
+          v22's GetDeviceData theory is retired. The v0.22 diagnostic log contained
+          zero BUFFERED BUTTON entries across the entire session, so that path was not
+          actually being consumed in the failing case. v0.23 no longer patches it.
 
-          The diagnostic log now records BUFFERED BUTTON lines showing raw_slot and
-          out_slot, so a single run can verify the second path is actually corrected.
+          The diagnostic STATE line now includes phase=0/1 so one log immediately shows
+          whether the empirical gameplay map was active for each press.
 
           TEST
           ----
           1. Replace BOTH MVP2005Modern.exe and mvp2005fix.dll.
-          2. Controller Setup -> Save to MVP once. Do not recalibrate.
-          3. Stay in the default F7 mode; do NOT switch to F8 for the first test.
-          4. Test A/B/X/Y, Start, Back/View, L3/R3, LB/RB and LT/RT.
-          5. If anything is still wrong, upload mvp2005controller_diagnostic.log.
-             It should identify itself as buffered-path normalization v22 and contain
-             BUFFERED BUTTON entries for button presses.
+          2. Do not recalibrate and do not resave controller.cfg for this test.
+          3. Launch normally; leave the default mode alone.
+          4. In gameplay test A/B/X/Y first, then Start, LB/RB, L3/R3 and triggers.
+          5. Back should no longer throw a pitch during gameplay; it is intentionally
+             suppressed there for this build.
+          6. If anything is still wrong, upload mvp2005controller_diagnostic.log once.
 
           Compatibility/runtime behavior outside controller handling remains on the
           verified RC1 path. Intro-video skipping remains disabled.
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.22-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.23-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.22-x86
+          name: mvp2005modern-launcher-v0.23-x86
           path: dist/
           if-no-files-found: error
