@@ -80,6 +80,7 @@ jobs:
           python3 ../patches/apply_menu_scale_draw_probe_v47_bootstrap.py
           python3 ../patches/apply_menu_scale_native_v48.py
           python3 ../patches/apply_menu_scale_production_v49.py
+          python3 ../patches/apply_gameplay_graphics_audit_v50.py
           git diff --check
           git diff --stat
 
@@ -89,66 +90,82 @@ jobs:
       - name: Build Windows x86 product
         run: make -C upstream release
 
-      - name: Package production launcher
+      - name: Package graphics audit preview
         run: |
           mkdir -p dist
           cp upstream/release/mvp2005fix.exe dist/MVP2005Modern.exe
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.49 - Production Native Frontend
+          MVP Baseball 2005 Modern v0.50 - Gameplay Graphics Audit
 
-          FRONTEND
-          --------
-          The widescreen-menu experiments are retired. MVP's frontend remains in its
-          stable native 800x600 render mode and the compatibility/presentation layer
-          scales the completed frame to the borderless client.
+          PURPOSE
+          -------
+          v0.50 is a passive diagnostics build on top of the v0.49 production baseline.
+          It does NOT change texture sizes, filtering, render targets, viewports,
+          shaders, antialiasing, LOD, or any other graphics behavior.
 
-          - No frontend backbuffer enlargement.
-          - No frontend viewport replacement.
-          - No frontend projection-matrix rewrite.
-          - Full-client mouse coordinates map to MVP's logical 800x600 frontend.
-          - Gameplay keeps the existing HD/widescreen behavior unchanged.
+          It records enough of MVP's Direct3D 8 resource/state pipeline to decide which
+          graphics improvements are actually worth pursuing rather than guessing.
 
-          PRODUCTION CLEANUP
-          ------------------
-          v0.49 stops installing the experimental SetViewport and draw-call probe hooks
-          and removes the high-volume MVP2005Modern-MenuScale.log instrumentation from
-          normal runtime paths. The superseded probe code remains inert in source so the
-          cleanup does not disturb unrelated D3D/gameplay code.
+          DEDICATED LOG
+          -------------
+          MVP2005Modern-Graphics.log
 
-          EXISTING FEATURES RETAINED
-          --------------------------
-          - Borderless mode and dgVoodoo compatibility setup
-          - HD/widescreen gameplay behavior
-          - Controller setup/runtime behavior
-          - Large Address Aware / 4 GB process support
-          - Skip Intro production behavior
-          - SafeDiscShim compatibility checks
+          The audit records:
+          - CreateDevice / Reset presentation parameters and multisampling
+          - texture creation: dimensions, mip levels, usage, format, pool, caller RVA
+          - render-target, depth-stencil, and image-surface creation
+          - CopyRects and UpdateTexture activity
+          - render-target switches with known dimensions when available
+          - viewport changes
+          - selected render states
+          - texture bindings correlated to known texture size/format
+          - texture filtering, mip filtering, LOD bias, and anisotropy state changes
+          - sampled gameplay draw calls with vertex/pixel shader and texture metadata
+          - per-frame gameplay summaries
 
-          TEST
-          ----
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll.
-          2. Launch to the main menu and verify mouse/menu behavior.
-          3. Enter gameplay and verify HD/widescreen behavior.
-          4. Quit back to the menu and verify frontend recovery.
+          SAFETY
+          ------
+          The audit wrappers only inspect arguments and metadata previously observed at
+          resource creation. They deliberately perform no nested GetRenderTarget,
+          GetBackBuffer, GetDesc, or other COM queries from hooked D3D calls.
 
-          MVP2005Modern-MenuScale.log is no longer expected during normal use.
+          Diagnostic-hook failure does not change the normal production-hook success
+          condition, so the audit cannot intentionally block launch merely because one
+          optional graphics hook failed to install.
+
+          TEST SEQUENCE
+          -------------
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.50 files.
+          2. Launch normally and enter an actual game.
+          3. Play at least one inning if practical. Include batting, pitching, and
+             fielding so several cameras/render paths are exercised.
+          4. Trigger a replay or between-play cutscene if convenient.
+          5. Quit back to the frontend normally.
+          6. Send MVP2005Modern-Graphics.log for analysis.
+
+          A short gameplay sample is still useful. The purpose is to discover whether
+          MVP exposes worthwhile fixed-resolution render targets, low filtering modes,
+          texture limits, or identifiable resource paths before implementing anything.
+
+          v0.49 remains the production baseline until this diagnostic build is tested.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.49 production component manifest
+          MVP2005 Modern v0.50 diagnostic component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
+          Production baseline: v0.49
           Controller behavior: v0.32 / setup hardening v0.33
           Large Address Aware: v0.34
           Skip Intro production: v0.42
-          Frontend rendering: native 800x600 internal path, productionized v0.49
-          Widescreen menu experiments v0.43-v0.48: retired/inert
+          Frontend: native 800x600 production policy v0.49
+          v0.50: passive gameplay graphics/resource/state audit only
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.49-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.50-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.49-x86
+          name: mvp2005modern-launcher-v0.50-x86
           path: dist/
           if-no-files-found: error
