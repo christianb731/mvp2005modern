@@ -85,6 +85,7 @@ jobs:
           python3 ../patches/apply_texture_filter_quality_v52.py
           python3 ../patches/apply_texture_filter_production_v53.py
           python3 ../patches/apply_texture_replacement_v54.py
+          python3 ../patches/apply_texture_packs_v55.py
           git diff --check
           git diff --stat
 
@@ -94,109 +95,101 @@ jobs:
       - name: Build Windows x86 product
         run: make -C upstream release
 
-      - name: Package texture replacement preview
+      - name: Package named texture packs preview
         run: |
           mkdir -p dist
           cp upstream/release/mvp2005fix.exe dist/MVP2005Modern.exe
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.54 - HD Texture Replacement Preview
+          MVP Baseball 2005 Modern v0.55 - Named Texture Packs Preview
 
           PURPOSE
           -------
-          v0.54 adds content-addressed external DDS texture replacement on top of the
-          v0.53 production baseline.
+          v0.55 keeps v0.54's content-addressed external DDS replacement layer and adds
+          a deliberately simple named texture-pack abstraction. It does NOT attempt to
+          merge arbitrary legacy BIG/FSH/geometry mods.
 
-          MVP's original files are never modified. When MVP fills a managed D3D8 texture,
-          MVP2005 Modern hashes the actual top-level pixel data while the game already has
-          that texture locked. This produces a stable ID based on dimensions, format and
-          content rather than COM pointers, install paths or filenames.
+          Game files are never modified by the texture-pack runtime.
 
-          Mod directory:
+          PACK LAYOUT
+          -----------
+          MVP2005Modern.Textures\
+            Packs\
+              StockHDTest\
+                manifest.ini
+                Textures\
+                  <stock-content-id>.dds
+            Replacements\        (v0.54 developer/legacy fallback)
+            Dumped\
 
-            MVP2005Modern.Textures\
-              Replacements\
-                <texture-id>.dds
-              Dumped\
-                <texture-id>.dds
-
-          On first use of a cataloged source texture, the runtime looks for a matching DDS
-          in Replacements. A replacement is created as a separate managed D3D8 texture and
-          may use a higher resolution than the original; texture coordinates are unchanged.
-
-          DEFAULT CONFIG
-          --------------
+          CONFIG
+          ------
           [TextureMods]
           Enabled=1
+          ActivePack=StockHDTest
           Catalog=1
           DumpTextures=0
           MinDimension=64
 
-          Enabled=0 disables replacement/fingerprinting.
-          Catalog=0 suppresses per-texture ID lines in the compact texture-mod log.
-          DumpTextures=1 exports supported original top-level textures as DDS files.
-          Dumping is OFF by default to avoid creating a large number of files.
+          ActivePack may be left empty to use only the flat Replacements folder.
+          v0.55 intentionally supports one named active pack at a time so conflict
+          behavior remains explicit while the replacement hook is still preview.
 
-          Existing production filtering remains available:
+          Existing gameplay filtering remains:
 
           [Graphics]
           TextureFiltering=1
           Anisotropy=16
 
-          DDS SUPPORT IN THIS PREVIEW
-          ---------------------------
-          DXT1, DXT3, DXT5, R8G8B8, A8R8G8B8, X8R8G8B8, R5G6B5,
-          X1R5G5B5, A1R5G5B5, A4R4G4B4, A8, L8 and A8L8.
-
-          Replacement DDS files may be up to 8192x8192 and up to 16 mip levels.
-          Cubemaps, volume textures and newer BC formats are intentionally rejected.
-
           DIAGNOSTICS
           -----------
-          v0.54 creates a compact:
-
-            MVP2005Modern-TextureMods.log
-
-          Important lines:
+          MVP2005Modern-TextureMods.log should contain:
             HOOK_TEXTURE_RESULT lock=1 unlock=1
+            CONFIG ... active_pack=StockHDTest
             TEXTURE_ID id=...
-            REPLACE_OK id=... original=... replacement=...
-            REPLACE_REJECT id=... reason=...
+            REPLACE_OK id=... source=pack:StockHDTest ...
+
+          STOCK-DERIVED PACK TOOLING
+          --------------------------
+          Repository tools can build a field-quality test from a user-owned stock
+          Yankee Stadium archive without redistributing EA assets:
+
+            python tools/texture_pack_tool.py make-yankee-field-test yankday.big output
+
+          This creates three 4x, stock-layout-preserving field DDS replacements with
+          full mip chains. Copy StockHDTest under MVP2005Modern.Textures\Packs and set
+          ActivePack=StockHDTest.
 
           FIRST TEST
           ----------
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll.
-          2. Do NOT enable DumpTextures yet.
-          3. Launch normally, enter a game, play through several camera changes, then exit.
-          4. Verify gameplay, menus and texture filtering still look normal.
-          5. Send MVP2005Modern-TextureMods.log.
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll with v0.55.
+          2. Put the generated StockHDTest folder under MVP2005Modern.Textures\Packs.
+          3. Set ActivePack=StockHDTest in mvp2005fix.ini.
+          4. Load Yankee Stadium - Day and play through several camera changes.
+          5. Verify the game remains stable and inspect the field at oblique angles.
+          6. Send MVP2005Modern-TextureMods.log.
 
-          This first run validates the IDirect3DTexture8 LockRect/UnlockRect hook and tells
-          us which source textures can be given stable content IDs. If stable, the next
-          test can enable dumping for a short session and replace one known texture with a
-          higher-resolution DDS.
-
-          v0.53 remains the production baseline until this new hook is validated.
+          v0.53 remains the production runtime baseline until the texture-object hook is
+          validated in a normal game session.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.54 experimental component manifest
+          MVP2005 Modern v0.55 experimental component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
           Production baseline: v0.53
-          HD texture replacement infrastructure: v0.54 preview
+          Content-addressed DDS replacement: v0.54 preview
+          Named texture packs: v0.55 preview
           Texture filtering: v0.53 (default ON, 16x anisotropic)
-          Graphics audit: v0.50 retired from active hooks
-          Auxiliary render-target preview: v0.51 retired from production hooks
           Controller behavior: v0.32 / setup hardening v0.33
           Large Address Aware: v0.34
           Skip Intro production: v0.42
           Frontend: native 800x600 production policy v0.49
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.54-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.55-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.54-x86
+          name: mvp2005modern-launcher-v0.55-x86
           path: dist/
           if-no-files-found: error
