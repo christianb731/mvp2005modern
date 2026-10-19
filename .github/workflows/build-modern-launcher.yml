@@ -82,6 +82,7 @@ jobs:
           python3 ../patches/apply_menu_scale_production_v49.py
           python3 ../patches/apply_gameplay_graphics_audit_v50_bootstrap.py
           python3 ../patches/apply_aux_render_quality_v51.py
+          python3 ../patches/apply_texture_filter_quality_v52.py
           git diff --check
           git diff --stat
 
@@ -91,76 +92,77 @@ jobs:
       - name: Build Windows x86 product
         run: make -C upstream release
 
-      - name: Package auxiliary render quality preview
+      - name: Package texture filtering quality preview
         run: |
           mkdir -p dist
           cp upstream/release/mvp2005fix.exe dist/MVP2005Modern.exe
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.51 - Auxiliary Render Quality Preview
+          MVP Baseball 2005 Modern v0.52 - Texture Filtering Quality Preview
 
           PURPOSE
           -------
-          The v0.50 audit found one exact gameplay render-to-texture path creating
-          128x128 / 256x256 A8R8G8B8 render targets, paired with matching D24S8
-          depth buffers and matching small viewports.
+          v0.51 successfully scaled MVP's small auxiliary render target path, but the
+          visual difference was negligible. That experiment now defaults OFF.
 
-          v0.51 tests whether those passes benefit from higher internal resolution.
-          Only that exact gameplay path is changed:
+          v0.52 instead tests higher-quality sampling on ordinary gameplay textures:
+          - stage 0 only
+          - ordinary textures only (render-target textures excluded)
+          - textures smaller than 128 pixels in either dimension excluded
+          - 16x anisotropic minification
+          - linear magnification
+          - trilinear mip filtering when the texture has mip levels
 
-          - 128x128 auxiliary target -> 256x256
-          - 256x256 auxiliary target -> 512x512
-          - matching depth buffers are scaled identically
-          - matching viewports are enlarged only while the scaled depth target is active
-
-          The main gameplay render target remains 2560x1440 and the frontend remains
-          on the stable native 800x600 path.
+          This is aimed at field/grass, uniforms, stadium surfaces and other textures
+          viewed at oblique angles. The frontend remains unchanged.
 
           CONFIG / KILL SWITCH
           --------------------
-          Add this to mvp2005fix.ini if needed:
-
           [Graphics]
+          TextureFiltering=1
+          Anisotropy=16
           AuxiliaryScale=1
 
-          1 = disabled/native behavior
-          2 = default v0.51 test
-          4 = supported for later experimentation, not recommended for the first test
+          TextureFiltering=0 restores MVP's normal filtering behavior.
+          Anisotropy accepts 1, 2, 4, 8 or 16.
+          AuxiliaryScale now defaults to 1; set it manually only if revisiting v0.51.
 
           DIAGNOSTICS
           -----------
-          MVP2005Modern-Graphics.log remains enabled. Look for AUX_QUALITY lines showing
-          CONFIG, TEXTURE, DEPTH and VIEWPORT original -> scaled dimensions.
+          MVP2005Modern-Graphics.log remains enabled.
+          Look for FILTER_QUALITY CONFIG and FILTER_QUALITY APPLY lines.
+          All four filtering state calls log HRESULTs; nonzero failure counts mean the
+          wrapper/device rejected one or more requested states.
 
           TEST
           ----
           1. Replace MVP2005Modern.exe and mvp2005fix.dll.
-          2. Leave AuxiliaryScale absent (defaults to 2).
-          3. Enter gameplay and compare shadows/reflections/field/player lighting or any
-             other visible effect that appears different.
-          4. Play through a few pitches and camera changes.
-          5. If anything breaks, set AuxiliaryScale=1 and confirm the issue disappears.
-          6. Send MVP2005Modern-Graphics.log and screenshots if a visible change exists.
+          2. Enter gameplay normally.
+          3. Look especially at grass/dirt, outfield walls, uniforms and stadium
+             textures at shallow viewing angles and during camera movement.
+          4. If the image looks worse or unusually sharp/noisy, set TextureFiltering=0.
+          5. Send MVP2005Modern-Graphics.log and your impression.
 
-          This is an experimental quality preview. v0.49 remains the production baseline.
+          v0.49 remains the production baseline while graphics previews are evaluated.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.51 experimental component manifest
+          MVP2005 Modern v0.52 experimental component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
           Production baseline: v0.49
           Graphics audit: v0.50
-          Auxiliary render-target quality preview: v0.51 (default 2x)
+          Auxiliary render-target preview: v0.51 (retained, default OFF)
+          Texture filtering quality preview: v0.52 (default ON, 16x anisotropic)
           Controller behavior: v0.32 / setup hardening v0.33
           Large Address Aware: v0.34
           Skip Intro production: v0.42
           Frontend: native 800x600 production policy v0.49
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.51-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.52-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.51-x86
+          name: mvp2005modern-launcher-v0.52-x86
           path: dist/
           if-no-files-found: error
