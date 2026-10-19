@@ -80,7 +80,7 @@ jobs:
           python3 ../patches/apply_menu_scale_draw_probe_v47_bootstrap.py
           python3 ../patches/apply_menu_scale_native_v48.py
           python3 ../patches/apply_menu_scale_production_v49.py
-          python3 ../patches/apply_gameplay_graphics_audit_v50.py
+          python3 ../patches/apply_gameplay_graphics_audit_v50_bootstrap.py
           git diff --check
           git diff --stat
 
