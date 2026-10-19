@@ -79,6 +79,7 @@ jobs:
           python3 ../patches/apply_menu_scale_widescreen_v46.py
           python3 ../patches/apply_menu_scale_draw_probe_v47_bootstrap.py
           python3 ../patches/apply_menu_scale_native_v48.py
+          python3 ../patches/apply_menu_scale_production_v49.py
           git diff --check
           git diff --stat
 
@@ -88,82 +89,66 @@ jobs:
       - name: Build Windows x86 product
         run: make -C upstream release
 
-      - name: Package launcher diagnostic preview
+      - name: Package production launcher
         run: |
           mkdir -p dist
           cp upstream/release/mvp2005fix.exe dist/MVP2005Modern.exe
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.48 - Native 800x600 Frontend Baseline
+          MVP Baseball 2005 Modern v0.49 - Production Native Frontend
 
-          WHAT v0.47 PROVED
-          -----------------
-          The first-start frontend used our forced 2560x1440 internal backbuffer and
-          viewport and produced a mixed/broken layout. After entering gameplay and
-          returning, MVP was back on an 800x600 frontend render target. At that point
-          our forced 2560x1440 SetViewport calls returned D3DERR_INVALIDCALL, yet the
-          visible menu became coherent.
+          FRONTEND
+          --------
+          The widescreen-menu experiments are retired. MVP's frontend remains in its
+          stable native 800x600 render mode and the compatibility/presentation layer
+          scales the completed frame to the borderless client.
 
-          v0.48 deliberately makes that native post-game frontend state the startup
-          state too. The HD borderless client remains unchanged; MVP renders its
-          frontend internally at 800x600 and the wrapper scales the completed frame.
+          - No frontend backbuffer enlargement.
+          - No frontend viewport replacement.
+          - No frontend projection-matrix rewrite.
+          - Full-client mouse coordinates map to MVP's logical 800x600 frontend.
+          - Gameplay keeps the existing HD/widescreen behavior unchanged.
 
-          V0.48 FRONTEND RULES
-          --------------------
-          - CreateDevice: preserve MVP's requested 800x600 frontend backbuffer.
-          - Reset: preserve MVP's requested frontend backbuffer size.
-          - SetViewport: pass MVP's viewport through unchanged.
-          - 800x600 orthographic matrices: pass through unchanged.
-          - Mouse: map the complete borderless client directly to logical 800x600.
-          - Gameplay: retain the existing raw-HD/render behavior unchanged.
+          PRODUCTION CLEANUP
+          ------------------
+          v0.49 stops installing the experimental SetViewport and draw-call probe hooks
+          and removes the high-volume MVP2005Modern-MenuScale.log instrumentation from
+          normal runtime paths. The superseded probe code remains inert in source so the
+          cleanup does not disturb unrelated D3D/gameplay code.
 
-          DRAW-PATH PROBE
-          ---------------
-          The safe v0.47 draw hooks remain active. On gameplay -> frontend recovery,
-          the draw counter is reset so the log captures the returned frontend too.
-          This lets us compare cold-start and post-game callsites directly.
+          EXISTING FEATURES RETAINED
+          --------------------------
+          - Borderless mode and dgVoodoo compatibility setup
+          - HD/widescreen gameplay behavior
+          - Controller setup/runtime behavior
+          - Large Address Aware / 4 GB process support
+          - Skip Intro production behavior
+          - SafeDiscShim compatibility checks
 
-          Expected diagnostics include:
-          - HOOKS V48 ... native_frontend=1 draw_trace=1 mouse_fullclient=1
-          - CREATEDEVICE FRONTEND NATIVE backbuffer=800x600 ... internal_resize=0
-          - SETVIEWPORT ... out=0,0 800x600 ... mode=NATIVE_PASS ... hr=0x00000000
-          - MOUSE FRONTEND mode=NATIVE_FULLCLIENT ...
-          - PHASE frontend native 800x600 restored ... draw_probe_rearmed=1
-          - DRAW ... rva=0x003bd0ea / 0x003bd16e ...
+          TEST
+          ----
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll.
+          2. Launch to the main menu and verify mouse/menu behavior.
+          3. Enter gameplay and verify HD/widescreen behavior.
+          4. Quit back to the menu and verify frontend recovery.
 
-          TEST SEQUENCE
-          -------------
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.48 files.
-          2. Launch to the main menu and take a screenshot immediately.
-          3. Verify the menu is coherent and mouse selection lines up.
-          4. Enter an actual game and verify gameplay remains correct.
-          5. Quit back to the main menu and take a second screenshot.
-          6. The two frontend screenshots should now use the same layout/render mode.
-          7. Send MVP2005Modern-MenuScale.log plus the two screenshots.
-
-          This is a stable diagnostic baseline, not the final true-16:9 frontend.
-          Once verified, the distinct DPUP draw path observed at RVA 0x003bd16e can
-          be investigated for a targeted background-only widescreen treatment.
-
-          v0.42 Skip Intro and all other production behavior remain unchanged.
+          MVP2005Modern-MenuScale.log is no longer expected during normal use.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.48 diagnostic component manifest
+          MVP2005 Modern v0.49 production component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
-          Production baseline through Skip Intro: v0.42
-          v0.43 broad D3D probe: superseded
-          v0.44 full-HD frontend viewport proof
-          v0.45 centered viewport proof; exposed non-zero-origin clipping
-          v0.46 shader-split widescreen experiment; rejected as semantic classifier
-          v0.47 coherent matrix + draw-call probe; exposed frontend lifecycle mismatch
-          v0.48 native 800x600 frontend render path + full-client mouse + rearmed draw probe
+          Controller behavior: v0.32 / setup hardening v0.33
+          Large Address Aware: v0.34
+          Skip Intro production: v0.42
+          Frontend rendering: native 800x600 internal path, productionized v0.49
+          Widescreen menu experiments v0.43-v0.48: retired/inert
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.48-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.49-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.48-x86
+          name: mvp2005modern-launcher-v0.49-x86
           path: dist/
           if-no-files-found: error
