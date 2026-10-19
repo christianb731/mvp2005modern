@@ -81,6 +81,7 @@ jobs:
           python3 ../patches/apply_menu_scale_native_v48.py
           python3 ../patches/apply_menu_scale_production_v49.py
           python3 ../patches/apply_gameplay_graphics_audit_v50_bootstrap.py
+          python3 ../patches/apply_aux_render_quality_v51.py
           git diff --check
           git diff --stat
 
@@ -90,82 +91,76 @@ jobs:
       - name: Build Windows x86 product
         run: make -C upstream release
 
-      - name: Package graphics audit preview
+      - name: Package auxiliary render quality preview
         run: |
           mkdir -p dist
           cp upstream/release/mvp2005fix.exe dist/MVP2005Modern.exe
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.50 - Gameplay Graphics Audit
+          MVP Baseball 2005 Modern v0.51 - Auxiliary Render Quality Preview
 
           PURPOSE
           -------
-          v0.50 is a passive diagnostics build on top of the v0.49 production baseline.
-          It does NOT change texture sizes, filtering, render targets, viewports,
-          shaders, antialiasing, LOD, or any other graphics behavior.
+          The v0.50 audit found one exact gameplay render-to-texture path creating
+          128x128 / 256x256 A8R8G8B8 render targets, paired with matching D24S8
+          depth buffers and matching small viewports.
 
-          It records enough of MVP's Direct3D 8 resource/state pipeline to decide which
-          graphics improvements are actually worth pursuing rather than guessing.
+          v0.51 tests whether those passes benefit from higher internal resolution.
+          Only that exact gameplay path is changed:
 
-          DEDICATED LOG
-          -------------
-          MVP2005Modern-Graphics.log
+          - 128x128 auxiliary target -> 256x256
+          - 256x256 auxiliary target -> 512x512
+          - matching depth buffers are scaled identically
+          - matching viewports are enlarged only while the scaled depth target is active
 
-          The audit records:
-          - CreateDevice / Reset presentation parameters and multisampling
-          - texture creation: dimensions, mip levels, usage, format, pool, caller RVA
-          - render-target, depth-stencil, and image-surface creation
-          - CopyRects and UpdateTexture activity
-          - render-target switches with known dimensions when available
-          - viewport changes
-          - selected render states
-          - texture bindings correlated to known texture size/format
-          - texture filtering, mip filtering, LOD bias, and anisotropy state changes
-          - sampled gameplay draw calls with vertex/pixel shader and texture metadata
-          - per-frame gameplay summaries
+          The main gameplay render target remains 2560x1440 and the frontend remains
+          on the stable native 800x600 path.
 
-          SAFETY
-          ------
-          The audit wrappers only inspect arguments and metadata previously observed at
-          resource creation. They deliberately perform no nested GetRenderTarget,
-          GetBackBuffer, GetDesc, or other COM queries from hooked D3D calls.
+          CONFIG / KILL SWITCH
+          --------------------
+          Add this to mvp2005fix.ini if needed:
 
-          Diagnostic-hook failure does not change the normal production-hook success
-          condition, so the audit cannot intentionally block launch merely because one
-          optional graphics hook failed to install.
+          [Graphics]
+          AuxiliaryScale=1
 
-          TEST SEQUENCE
-          -------------
-          1. Replace MVP2005Modern.exe and mvp2005fix.dll with the v0.50 files.
-          2. Launch normally and enter an actual game.
-          3. Play at least one inning if practical. Include batting, pitching, and
-             fielding so several cameras/render paths are exercised.
-          4. Trigger a replay or between-play cutscene if convenient.
-          5. Quit back to the frontend normally.
-          6. Send MVP2005Modern-Graphics.log for analysis.
+          1 = disabled/native behavior
+          2 = default v0.51 test
+          4 = supported for later experimentation, not recommended for the first test
 
-          A short gameplay sample is still useful. The purpose is to discover whether
-          MVP exposes worthwhile fixed-resolution render targets, low filtering modes,
-          texture limits, or identifiable resource paths before implementing anything.
+          DIAGNOSTICS
+          -----------
+          MVP2005Modern-Graphics.log remains enabled. Look for AUX_QUALITY lines showing
+          CONFIG, TEXTURE, DEPTH and VIEWPORT original -> scaled dimensions.
 
-          v0.49 remains the production baseline until this diagnostic build is tested.
+          TEST
+          ----
+          1. Replace MVP2005Modern.exe and mvp2005fix.dll.
+          2. Leave AuxiliaryScale absent (defaults to 2).
+          3. Enter gameplay and compare shadows/reflections/field/player lighting or any
+             other visible effect that appears different.
+          4. Play through a few pitches and camera changes.
+          5. If anything breaks, set AuxiliaryScale=1 and confirm the issue disappears.
+          6. Send MVP2005Modern-Graphics.log and screenshots if a visible change exists.
+
+          This is an experimental quality preview. v0.49 remains the production baseline.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.50 diagnostic component manifest
+          MVP2005 Modern v0.51 experimental component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
           Production baseline: v0.49
+          Graphics audit: v0.50
+          Auxiliary render-target quality preview: v0.51 (default 2x)
           Controller behavior: v0.32 / setup hardening v0.33
           Large Address Aware: v0.34
           Skip Intro production: v0.42
           Frontend: native 800x600 production policy v0.49
-          v0.50: passive gameplay graphics/resource/state audit only
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.50-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.51-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.50-x86
+          name: mvp2005modern-launcher-v0.51-x86
           path: dist/
           if-no-files-found: error
