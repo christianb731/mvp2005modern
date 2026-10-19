@@ -83,6 +83,7 @@ jobs:
           python3 ../patches/apply_gameplay_graphics_audit_v50_bootstrap.py
           python3 ../patches/apply_aux_render_quality_v51.py
           python3 ../patches/apply_texture_filter_quality_v52.py
+          python3 ../patches/apply_texture_filter_production_v53.py
           git diff --check
           git diff --stat
 
@@ -92,77 +93,81 @@ jobs:
       - name: Build Windows x86 product
         run: make -C upstream release
 
-      - name: Package texture filtering quality preview
+      - name: Package production texture filtering
         run: |
           mkdir -p dist
           cp upstream/release/mvp2005fix.exe dist/MVP2005Modern.exe
           cp upstream/release/mvp2005fix.dll dist/mvp2005fix.dll
           cp upstream/LICENSE dist/LICENSE
           cat > dist/SETUP.txt <<'EOF'
-          MVP Baseball 2005 Modern v0.52 - Texture Filtering Quality Preview
+          MVP Baseball 2005 Modern v0.53 - Production Texture Filtering
 
           PURPOSE
           -------
-          v0.51 successfully scaled MVP's small auxiliary render target path, but the
-          visual difference was negligible. That experiment now defaults OFF.
+          v0.52 validated a small but visible image-quality improvement from modern
+          texture filtering during gameplay. v0.53 promotes that behavior to the
+          production runtime and retires the broad v0.50-v0.52 graphics audit hooks.
 
-          v0.52 instead tests higher-quality sampling on ordinary gameplay textures:
-          - stage 0 only
-          - ordinary textures only (render-target textures excluded)
-          - textures smaller than 128 pixels in either dimension excluded
-          - 16x anisotropic minification
+          Production filtering behavior:
+          - gameplay only
+          - texture stage 0 only
+          - ordinary textures only; render-target textures are excluded
+          - textures smaller than 128 pixels in either dimension are excluded
+          - 16x anisotropic minification by default
           - linear magnification
-          - trilinear mip filtering when the texture has mip levels
+          - trilinear mip filtering when a texture has mip levels
 
-          This is aimed at field/grass, uniforms, stadium surfaces and other textures
-          viewed at oblique angles. The frontend remains unchanged.
+          The retired v0.51 auxiliary render-target scaling experiment is no longer
+          installed in the production hook path.
 
           CONFIG / KILL SWITCH
           --------------------
+          Optional mvp2005fix.ini settings:
+
           [Graphics]
           TextureFiltering=1
           Anisotropy=16
-          AuxiliaryScale=1
 
-          TextureFiltering=0 restores MVP's normal filtering behavior.
+          TextureFiltering=0 restores MVP's original filtering behavior.
           Anisotropy accepts 1, 2, 4, 8 or 16.
-          AuxiliaryScale now defaults to 1; set it manually only if revisiting v0.51.
 
-          DIAGNOSTICS
-          -----------
-          MVP2005Modern-Graphics.log remains enabled.
-          Look for FILTER_QUALITY CONFIG and FILTER_QUALITY APPLY lines.
-          All four filtering state calls log HRESULTs; nonzero failure counts mean the
-          wrapper/device rejected one or more requested states.
+          PRODUCTION CLEANUP
+          ------------------
+          The broad graphics audit hooks for render targets, depth buffers, viewports,
+          render states, draw calls, pixel shaders and frame summaries are no longer
+          installed. Normal use should not create or rewrite MVP2005Modern-Graphics.log.
+
+          The filtering implementation keeps only lightweight texture-creation metadata
+          plus the stage-0 texture-binding hook required to apply the validated filter
+          states. The metadata capacity is expanded for long sessions and modded assets.
 
           TEST
           ----
           1. Replace MVP2005Modern.exe and mvp2005fix.dll.
-          2. Enter gameplay normally.
-          3. Look especially at grass/dirt, outfield walls, uniforms and stadium
-             textures at shallow viewing angles and during camera movement.
-          4. If the image looks worse or unusually sharp/noisy, set TextureFiltering=0.
-          5. Send MVP2005Modern-Graphics.log and your impression.
+          2. Launch normally and play several pitches/innings.
+          3. Verify the field, stadium, uniforms and camera transitions remain stable.
+          4. Verify menus, controller behavior, Skip Intro and borderless still work.
+          5. Confirm no new giant MVP2005Modern-Graphics.log is produced.
 
-          v0.49 remains the production baseline while graphics previews are evaluated.
+          v0.53 supersedes v0.49 as the integrated production baseline once sanity-tested.
           EOF
           cat > dist/COMPONENTS.txt <<'EOF'
-          MVP2005 Modern v0.52 experimental component manifest
+          MVP2005 Modern v0.53 production component manifest
           upstream mvp2005fix: 1c0dae9b030a8fb66648655c8d14043af1ead676
-          Production baseline: v0.49
-          Graphics audit: v0.50
-          Auxiliary render-target preview: v0.51 (retained, default OFF)
-          Texture filtering quality preview: v0.52 (default ON, 16x anisotropic)
+          Integrated production baseline: v0.53
+          Texture filtering: v0.53 (default ON, 16x anisotropic)
+          Graphics audit: v0.50 retired from active hooks
+          Auxiliary render-target preview: v0.51 retired from production hooks
           Controller behavior: v0.32 / setup hardening v0.33
           Large Address Aware: v0.34
           Skip Intro production: v0.42
           Frontend: native 800x600 production policy v0.49
           EOF
-          (cd dist && zip -9 mvp2005modern-launcher-v0.52-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
+          (cd dist && zip -9 mvp2005modern-launcher-v0.53-x86.zip MVP2005Modern.exe mvp2005fix.dll LICENSE SETUP.txt COMPONENTS.txt)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mvp2005modern-launcher-v0.52-x86
+          name: mvp2005modern-launcher-v0.53-x86
           path: dist/
           if-no-files-found: error
