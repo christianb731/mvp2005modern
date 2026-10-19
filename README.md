@@ -6,14 +6,15 @@ MVP2005 Modern does **not** distribute `mvp2005.exe`, game assets, a no-CD execu
 
 ## Current status
 
-The current integrated launcher/runtime build is **v0.42**. The compatibility runtime remains based on the verified RC1 baseline, with the v0.32 controller behavior intentionally frozen and later features layered on top.
+The current integrated launcher/runtime build is **v0.49**. The compatibility runtime remains based on the verified RC1 baseline, with the v0.32 controller behavior intentionally frozen and later features layered on top.
 
 Verified behavior includes:
 
 - MVP Baseball 2005 launches on modern Windows with the original SafeDisc flow handled by SafeDiscShim;
 - dgVoodoo2 provides the Direct3D 8 / DirectDraw compatibility layer;
-- high-resolution modes and true widescreen projection work;
+- high-resolution modes and true widescreen projection work during gameplay;
 - the game runs true borderless rather than exclusive fullscreen;
+- the frontend remains on MVP's stable native 800x600 render path and is scaled to the borderless client by the compatibility/presentation layer;
 - frontend/menu and gameplay mouse coordinates are handled separately and correctly;
 - repeated menu -> gameplay -> menu transitions recover input correctly;
 - Alt-Tab works without MVP minimizing itself or stealing focus back;
@@ -102,7 +103,7 @@ The launcher owns these tested MVP-specific compatibility settings so users do n
 
 ## Runtime configuration
 
-For a 16:9 output, the tested horizontal projection scale is `0.75`. Resolution, widescreen, borderless mode, the large-drive save fix, Large Address Aware intent, and Skip Intro are written through the launcher.
+For a 16:9 gameplay output, the tested horizontal projection scale is `0.75`. Resolution, widescreen, borderless mode, the large-drive save fix, Large Address Aware intent, and Skip Intro are written through the launcher.
 
 General runtime logging is normally off and can be enabled with:
 
@@ -110,6 +111,20 @@ General runtime logging is normally off and can be enabled with:
 [Debug]
 Logging=1
 ```
+
+## Frontend menus
+
+The widescreen-menu experiments from v0.43 through v0.48 are retired. They established that MVP's frontend is substantially more coupled to its original 800x600 assumptions than gameplay and that forcing an HD frontend render target/viewport creates layout and lifecycle problems for limited visual benefit.
+
+The production v0.49 policy is therefore:
+
+- keep MVP's frontend backbuffer, viewport, and orthographic projection native;
+- do not rewrite frontend matrices or install the experimental SetViewport/draw-probe hooks;
+- let the compatibility/presentation layer scale the completed frontend frame to the borderless client;
+- map the complete client mouse coordinates back into MVP's logical 800x600 frontend space;
+- leave gameplay HD/widescreen rendering unchanged.
+
+The high-volume `MVP2005Modern-MenuScale.log` probe is no longer expected during normal use.
 
 ## Controller baseline
 
@@ -152,7 +167,7 @@ The launcher verifies the PE header before writing, changes only the LAA charact
 
 ## Skip Intro
 
-Skip Intro is a supported v0.42 launcher feature.
+Skip Intro is a supported v0.42 launcher/runtime feature retained in the v0.49 integrated build.
 
 When **Skip EA Sports / MVP intro videos** is enabled:
 
@@ -167,7 +182,7 @@ When **Skip EA Sports / MVP intro videos** is enabled:
 
 Unchecking Skip Intro restores normal startup movie behavior on the next launch. The cache directory can be deleted at any time and will be regenerated from the user's installed movies when needed.
 
-`MVP2005Modern-Intro.log` remains available for support, but v0.42 uses concise production logging: healthy launches record only startup identity, cache-ready summaries, and final automatic-skip success. Validation failures, fallbacks, focus aborts, and input failures retain detailed diagnostics.
+`MVP2005Modern-Intro.log` remains available for support, but the production path uses concise logging: healthy launches record only startup identity, cache-ready summaries, and final automatic-skip success. Validation failures, fallbacks, focus aborts, and input failures retain detailed diagnostics.
 
 ## Pinned external components
 
@@ -179,11 +194,11 @@ Unchecking Skip Intro restores normal startup movie behavior on the next launch.
 - **SafeDiscShim** — compatibility for the original game's SafeDisc launch flow;
 - **dgVoodoo2** — modern Direct3D/DirectDraw wrapper;
 - **mvp2005fix** — upstream resolution, widescreen, and large-drive compatibility work;
-- **MVP2005 Modern runtime patches** — true borderless presentation, phase-aware mouse handling, Alt-Tab fixes, controller translation, Large Address Aware diagnostics, and Skip Intro;
+- **MVP2005 Modern runtime patches** — true borderless presentation, phase-aware mouse handling, Alt-Tab fixes, controller translation, Large Address Aware diagnostics, Skip Intro, and the native frontend production policy;
 - **MVP2005 Modern launcher** — setup verification/repair, path detection, resolution, controller configuration, feature settings, and launch orchestration.
 
 ## Repository build structure
 
 `patches/apply_production_rc1.py` is the compatibility-runtime baseline. The launcher/controller/features are layered afterward by the build workflow so the history of experiments remains reproducible.
 
-The controller behavior remains frozen at v0.32 while later setup, LAA, and Skip Intro layers are applied independently. The next larger product area can therefore move on from startup compatibility work without destabilizing the known-good controller mapping baseline.
+The controller behavior remains frozen at v0.32; LAA is retained from v0.34; Skip Intro is retained from v0.42; and the frontend menu experiments are closed out by the v0.49 production cleanup. New work can therefore proceed from a stable integrated baseline without carrying the high-volume menu-probe hooks in normal execution.
