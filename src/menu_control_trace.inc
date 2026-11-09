@@ -6,6 +6,7 @@ typedef void (__attribute__((thiscall)) *MenuFrameFn)(void *frontend);
 typedef BYTE (__attribute__((thiscall)) *MenuActionFn)(void *frontend, DWORD player, DWORD action);
 typedef void (__attribute__((thiscall)) *MenuSelectRowFn)(void *grid, LONG row);
 typedef BYTE (__attribute__((thiscall)) *MenuSceneActionFn)(void *scene, DWORD player);
+typedef void (__attribute__((thiscall)) *MenuQueueActionFn)(void *frontend, DWORD action, DWORD player);
 static void *volatile menu_dispatch_original;
 static void *volatile menu_scene_dispatch_original;
 static void *volatile menu_grid_dispatch_original;
@@ -21,6 +22,7 @@ static LONG menu_trace_archive_samples;
 static int menu_trace_actions_enabled;
 static int menu_controller_enabled;
 static int menu_controller_title_enabled;
+static MenuQueueActionFn menu_controller_queue_action;
 static int menu_trace_controls_enabled;
 static volatile LONG menu_pointer_messages;
 static __thread LONG menu_pointer_seen;
@@ -33,14 +35,17 @@ static __thread int menu_controller_back_requested;
 enum {
     MENU_SCENE_TITLE = 0x004b7900,
     MENU_SCENE_MAIN = 0x004b74b0,
+    MENU_SCENE_MODES = 0x004a7db0,
     MENU_SCENE_TEAM = 0x004bcdb8,
     MENU_SCENE_NAV = 0x004a5900,
-    MENU_MAIN_GRID = 0x0049f5d0,
+    MENU_ROW_GRID = 0x0049f5d0,
     MENU_NAV_BUTTON = 0x0049c2a0,
     MENU_SELECT_ROW_RVA = 0x0020ee60,
     MENU_MAIN_ACTIVITY_RVA = 0x0028a460,
     MENU_NAV_ACTIVATE_RVA = 0x0023da50,
+    MENU_QUEUE_ACTION_RVA = 0x001efee0,
     MENU_ACTION_CONFIRM = 1,
+    MENU_ACTION_CANCEL = 2,
     MENU_ACTION_BACK = 5,
     MENU_ACTION_UP = 6,
     MENU_ACTION_DOWN = 8
@@ -69,24 +74,31 @@ static int menu_controller_pointer_active(void)
           GetAsyncKeyState(VK_MBUTTON)) & 0x8000);
 }
 
-static void menu_controller_move_main_row(void *grid, void *owner)
+static int menu_controller_grid_scene(DWORD scene)
+{
+    return scene == MENU_SCENE_MAIN || scene == MENU_SCENE_MODES;
+}
+
+static void menu_controller_move_row(void *grid, void *owner, DWORD scene)
 {
     void **vtable = *(void ***)grid;
-    void *activity = (*(void ***)owner)[0xf4 / sizeof(void *)];
     MenuSelectRowFn select_row;
-    MenuSceneActionFn reset_idle;
     LONG row, rows, next;
 
-    if (gfx_caller_rva(vtable) != MENU_MAIN_GRID ||
+    if (gfx_caller_rva(vtable) != MENU_ROW_GRID ||
         gfx_caller_rva(vtable[0x10c / sizeof(void *)]) != MENU_SELECT_ROW_RVA) return;
     memcpy(&rows, (const BYTE *)grid + 0x50, sizeof(rows));
     memcpy(&row, (const BYTE *)grid + 0x68, sizeof(row));
-    if (rows <= 0 || row < 0 || row >= rows) return;
-    next = row + (menu_controller_action == MENU_ACTION_UP ? -1 : 1);
+    if (rows <= 0 || row >= rows || (row < 0 && scene == MENU_SCENE_MAIN)) return;
+    next = row < 0 ? 0 : row + (menu_controller_action == MENU_ACTION_UP ? -1 : 1);
     menu_controller_action = 0;
-    if (gfx_caller_rva(activity) == MENU_MAIN_ACTIVITY_RVA) {
-        memcpy(&reset_idle, &activity, sizeof(reset_idle));
-        reset_idle(owner, 0);
+    if (scene == MENU_SCENE_MAIN) {
+        void *activity = (*(void ***)owner)[0xf4 / sizeof(void *)];
+        if (gfx_caller_rva(activity) == MENU_MAIN_ACTIVITY_RVA) {
+            MenuSceneActionFn reset_idle;
+            memcpy(&reset_idle, &activity, sizeof(reset_idle));
+            reset_idle(owner, 0);
+        }
     }
     if (next < 0 || next >= rows) return;
     memcpy(&select_row, &vtable[0x10c / sizeof(void *)], sizeof(select_row));
@@ -167,21 +179,27 @@ static BYTE __attribute__((thiscall)) trace_menu_grid_dispatch(void *grid, void 
     MenuDispatchFn original;
     void *entry = InterlockedCompareExchangePointer(&menu_grid_dispatch_original, NULL, NULL);
     DWORD scene_class = owner ? gfx_caller_rva(*(void **)owner) : 0xffffffffUL;
+    DWORD grid_class = gfx_caller_rva(*(void **)grid);
+    static const SHORT modes_bounds[] = {322, 121, 243, 261};
+    int modes_grid = scene_class == MENU_SCENE_MODES &&
+        !memcmp((const BYTE *)grid + 0x2a, modes_bounds, sizeof(modes_bounds));
     SHORT bounds[4];
     BYTE handled;
 
     if (!entry) return 0;
     memcpy(&original, &entry, sizeof(original));
 #ifdef MENU_CONTROLLER_TEST_BUILD
-    if (scene_class == MENU_SCENE_MAIN) trace_menu_test_grid(grid, menu_controller_grid_focus);
+    if (scene_class == MENU_SCENE_MAIN || modes_grid)
+        trace_menu_test_grid(grid, grid_class, scene_class, menu_controller_grid_focus);
 #endif
-    if (menu_controller_grid_focus && scene_class == MENU_SCENE_MAIN) {
+    if (menu_controller_grid_focus && (scene_class == MENU_SCENE_MAIN ||
+        (modes_grid && grid_class == MENU_ROW_GRID))) {
         if (!menu_controller_pointer_active()) {
             /* The native directional actions scroll the grid. Select a row
              * through the same widget method used by the mouse instead. */
             if (menu_trace_frontend &&
                 (menu_controller_action == MENU_ACTION_UP || menu_controller_action == MENU_ACTION_DOWN)) {
-                menu_controller_move_main_row(grid, owner);
+                menu_controller_move_row(grid, owner, scene_class);
             }
             return 0;
         }
@@ -192,11 +210,11 @@ static BYTE __attribute__((thiscall)) trace_menu_grid_dispatch(void *grid, void 
     memcpy(bounds, (const BYTE *)grid + 0x2a, sizeof(bounds));
     handled = original(grid, owner);
     if (handled && InterlockedIncrement(&menu_grid_samples) <= 100) {
-        char line[144];
+        char line[176];
         snprintf(line, sizeof(line),
-            "menu grid handled scene_rva=%08lx rect=%d,%d %dx%d caller_rva=%08lx\n",
+            "menu grid handled scene_rva=%08lx rect=%d,%d %dx%d caller_rva=%08lx grid_rva=%08lx\n",
             (unsigned long)scene_class, bounds[0], bounds[1], bounds[2], bounds[3],
-            (unsigned long)gfx_caller_rva(__builtin_return_address(0)));
+            (unsigned long)gfx_caller_rva(__builtin_return_address(0)), (unsigned long)grid_class);
         log_line(line);
     }
     return handled;
@@ -267,6 +285,11 @@ static DWORD menu_controller_active_scene(const DWORD *scenes, DWORD count)
             break;
         case MENU_SCENE_TITLE:
             if (!menu_controller_title_enabled) return 0;
+            if (scene) return 0;
+            scene = scenes[i];
+            break;
+        case MENU_SCENE_MODES:
+            if (!menu_controller_queue_action) return 0;
             /* fall through */
         case MENU_SCENE_MAIN:
         case MENU_SCENE_TEAM:
@@ -393,9 +416,13 @@ static void sample_menu_controller(const DWORD *scenes, DWORD count)
         if (pressed & CXINPUT_A) menu_controller_action = MENU_ACTION_BACK;
         return;
     }
+    if (scene == MENU_SCENE_MODES && (pressed & CXINPUT_B)) {
+        menu_controller_action = MENU_ACTION_CANCEL;
+        return;
+    }
     for (size_t i = 0; i < sizeof(bindings) / sizeof(bindings[0]); ++i) {
         if ((pressed & bindings[i].button) && (!bindings[i].team_only || scene == MENU_SCENE_TEAM)) {
-            if (scene == MENU_SCENE_MAIN && bindings[i].action >= 6 &&
+            if (menu_controller_grid_scene(scene) && bindings[i].action >= 6 &&
                 !menu_controller_grid_focus && GetCursorPos(&menu_pointer_position)) {
                 menu_pointer_seen = InterlockedCompareExchange(&menu_pointer_messages, 0, 0);
                 menu_controller_grid_focus = 1;
@@ -460,8 +487,14 @@ static BYTE __attribute__((thiscall)) trace_menu_action(void *frontend, DWORD pl
             menu_controller_back_requested = 1;
             return pressed;
         }
-        if (menu_controller_scene == MENU_SCENE_MAIN &&
+        if (menu_controller_grid_scene(menu_controller_scene) &&
             (action == MENU_ACTION_UP || action == MENU_ACTION_DOWN)) return pressed;
+        if (menu_controller_scene == MENU_SCENE_MODES && action == MENU_ACTION_CANCEL) {
+            /* The stock navigation button queues this action. The transition
+             * handler polls it again from a different call site in this frame. */
+            if (pressed || ((const BYTE *)frontend)[0xc8]) return pressed;
+            menu_controller_queue_action(frontend, action, player);
+        }
         if (action == menu_controller_release) {
             menu_controller_release = 0;
         } else if (action >= 6 && action <= 12) {
@@ -519,6 +552,12 @@ static void install_menu_action_trace(BYTE *base)
     static const BYTE title_start_signature[] = {
         0x56, 0x8b, 0xf1, 0x83, 0xbe, 0xd8, 0x01, 0x00, 0x00, 0x03, 0x74, 0x06
     };
+    static const BYTE queue_action_signature[] = {
+        0x8b, 0x44, 0x24, 0x04, 0x8b, 0x54, 0x24, 0x08, 0xc6, 0x81, 0xc8, 0x00, 0x00, 0x00, 0x01
+    };
+    static const BYTE queue_action_tail[] = {
+        0x89, 0x81, 0xcc, 0x00, 0x00, 0x00, 0x89, 0x91, 0xd0, 0x00, 0x00, 0x00, 0xc2, 0x08, 0x00
+    };
 
     if (menu_controller_enabled &&
         (!menu_trace_signature(base, MENU_SELECT_ROW_RVA, row_signature, sizeof(row_signature)) ||
@@ -540,6 +579,14 @@ static void install_menu_action_trace(BYTE *base)
     if (menu_controller_enabled) {
         log_line(menu_controller_title_enabled ? "menu controller title enabled\n" :
             "menu controller title disabled: unsupported handler signature\n");
+        if (menu_trace_signature(base, MENU_QUEUE_ACTION_RVA, queue_action_signature, sizeof(queue_action_signature)) &&
+            menu_trace_signature(base, MENU_QUEUE_ACTION_RVA + sizeof(queue_action_signature),
+                queue_action_tail, sizeof(queue_action_tail))) {
+            void *queue = base + MENU_QUEUE_ACTION_RVA;
+            memcpy(&menu_controller_queue_action, &queue, sizeof(menu_controller_queue_action));
+        }
+        log_line(menu_controller_queue_action ? "menu controller game modes enabled\n" :
+            "menu controller game modes disabled: unsupported pending-action signature\n");
     }
     log_line(hook_function(base + 0x00242da0, trace_menu_frame, &menu_frame_original) > 0 ?
         "menu frame trace installed\n" : "menu frame trace hook unavailable\n");

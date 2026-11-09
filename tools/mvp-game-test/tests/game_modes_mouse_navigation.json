@@ -1,0 +1,25 @@
+{
+  "name": "game_modes_mouse_navigation",
+  "description": "Verify stock mouse hover and Back on Game Modes while the controller pilot is enabled.",
+  "force_cleanup": true,
+  "capture_on_failure": true,
+  "steps": [
+    {"action": "launch"},
+    {"action": "wait_window", "timeout": 15},
+    {"action": "wait_log", "contains": "class_rva=004b7900", "timeout": 25},
+    {"action": "wait_log", "source": "intro", "contains": "AUTO SKIP PASS", "timeout": 10},
+    {"action": "wait_pixels", "timeout": 14, "tolerance": 24, "samples": [[0.47, 0.462, 236, 237, 240], [0.53, 0.462, 243, 244, 245], [0.47, 0.472, 70, 70, 72], [0.53, 0.472, 70, 71, 72]]},
+    {"action": "menu_input", "scene": "title", "button": "a", "timeout": 3},
+    {"action": "wait_log", "contains": "menu test grid row=0 controller_focus=0", "timeout": 10},
+    {"action": "menu_input", "scene": "main", "button": "down", "timeout": 3},
+    {"action": "wait_log", "contains": "menu test grid row=1 controller_focus=1", "timeout": 5},
+    {"action": "menu_input", "scene": "main", "button": "a", "timeout": 3},
+    {"action": "wait_log", "contains": "class_rva=004a7db0", "timeout": 10},
+    {"action": "wait_log", "contains": "menu test modes grid row=0 controller_focus=0", "timeout": 5},
+    {"action": "wait", "seconds": 1.6},
+    {"action": "move_cursor", "relative": true, "x": 0.69, "y": 0.407},
+    {"action": "wait_log", "contains": "menu test modes grid row=1 controller_focus=0", "timeout": 5},
+    {"action": "click", "relative": true, "x": 0.16, "y": 0.901},
+    {"action": "wait_log", "contains": "class_rva=004b74b0", "timeout": 10}
+  ]
+}

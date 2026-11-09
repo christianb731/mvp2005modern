@@ -69,6 +69,7 @@ static WORD read_menu_test_buttons(DWORD scene, int eligible)
     if (!strcmp(scene_name, "main")) expected_scene = MENU_SCENE_MAIN;
     if (!strcmp(scene_name, "team")) expected_scene = MENU_SCENE_TEAM;
     if (!strcmp(scene_name, "title")) expected_scene = MENU_SCENE_TITLE;
+    if (!strcmp(scene_name, "modes")) expected_scene = MENU_SCENE_MODES;
     if (eligible && expected_scene && expected_scene == scene) {
         for (size_t i = 0; i < sizeof(buttons) / sizeof(buttons[0]); ++i) {
             if (strcmp(button_name, buttons[i].name)) continue;
@@ -85,20 +86,32 @@ static WORD read_menu_test_buttons(DWORD scene, int eligible)
     return menu_test_button;
 }
 
-static void trace_menu_test_grid(void *grid, int controller_focus)
+static void trace_menu_test_grid(void *grid, DWORD grid_class, DWORD scene, int controller_focus)
 {
+    static __thread DWORD previous_scene;
     static __thread LONG previous_row = -1;
     static __thread int previous_focus = -1;
+    static __thread int reported_unknown_modes_grid;
     LONG row;
-    char line[96];
+    char line[128];
 
-    if (!menu_test_input_path[0] || gfx_caller_rva(*(void **)grid) != 0x0049f5d0) return;
+    if (!menu_test_input_path[0]) return;
+    if (grid_class != MENU_ROW_GRID) {
+        if (scene == MENU_SCENE_MODES && !reported_unknown_modes_grid) {
+            reported_unknown_modes_grid = 1;
+            snprintf(line, sizeof(line), "menu test modes grid class=%08lx unsupported\n",
+                (unsigned long)grid_class);
+            log_line(line);
+        }
+        return;
+    }
     /* The mouse dispatcher compares its hit row to this field before selecting it. */
     memcpy(&row, (const BYTE *)grid + 0x68, sizeof(row));
-    if (row == previous_row && controller_focus == previous_focus) return;
+    if (scene == previous_scene && row == previous_row && controller_focus == previous_focus) return;
+    previous_scene = scene;
     previous_row = row;
     previous_focus = controller_focus;
-    snprintf(line, sizeof(line), "menu test grid row=%ld controller_focus=%d\n",
-        (long)row, controller_focus);
+    snprintf(line, sizeof(line), "menu test %sgrid row=%ld controller_focus=%d\n",
+        scene == MENU_SCENE_MODES ? "modes " : "", (long)row, controller_focus);
     log_line(line);
 }
