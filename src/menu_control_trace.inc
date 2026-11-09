@@ -23,6 +23,7 @@ static int menu_trace_actions_enabled;
 static int menu_controller_enabled;
 static int menu_controller_title_enabled;
 static int menu_controller_my_mvp_enabled;
+static int menu_controller_prompt_enabled;
 static MenuQueueActionFn menu_controller_queue_action;
 static int menu_trace_controls_enabled;
 static volatile LONG menu_pointer_messages;
@@ -40,6 +41,7 @@ enum {
     MENU_SCENE_MY_MVP = 0x004b8020,
     MENU_SCENE_OPTIONS = 0x004b71c0,
     MENU_SCENE_AUDIO = 0x004bebf0,
+    MENU_SCENE_PROMPT = 0x004a5ed8,
     MENU_SCENE_TEAM = 0x004bcdb8,
     MENU_SCENE_NAV = 0x004a5900,
     MENU_ROW_GRID = 0x0049f5d0,
@@ -82,7 +84,8 @@ static int menu_controller_pointer_active(void)
 static int menu_controller_grid_scene(DWORD scene)
 {
     return scene == MENU_SCENE_MAIN || scene == MENU_SCENE_MODES ||
-        scene == MENU_SCENE_MY_MVP || scene == MENU_SCENE_OPTIONS || scene == MENU_SCENE_AUDIO;
+        scene == MENU_SCENE_MY_MVP || scene == MENU_SCENE_OPTIONS ||
+        scene == MENU_SCENE_AUDIO || scene == MENU_SCENE_PROMPT;
 }
 
 static int menu_controller_list_matches(DWORD scene, const void *grid)
@@ -91,6 +94,7 @@ static int menu_controller_list_matches(DWORD scene, const void *grid)
         {MENU_SCENE_MODES, {322, 121, 243, 261}},
         {MENU_SCENE_MY_MVP, {320, 191, 245, 124}},
         {MENU_SCENE_OPTIONS, {82, 140, 245, 198}},
+        {MENU_SCENE_PROMPT, {0, 0, 640, 480}},
     };
 
     for (size_t i = 0; i < sizeof(lists) / sizeof(lists[0]); ++i) {
@@ -351,6 +355,10 @@ static DWORD menu_controller_active_scene(const DWORD *scenes, DWORD count)
             if (scene) return 0;
             scene = scenes[i];
             break;
+        case MENU_SCENE_PROMPT:
+            if (!menu_controller_prompt_enabled || scene) return 0;
+            scene = scenes[i];
+            break;
         case 0x004a6458:
         case 0x004ba2e0:
         case 0x004a4fd0:
@@ -436,7 +444,7 @@ static void sample_menu_controller(const DWORD *scenes, DWORD count)
     WORD held = 0;
     WORD pressed;
     int eligible = scene && borderless_window && GetForegroundWindow() == borderless_window &&
-        !InterlockedCompareExchange(&gameplay_input_phase, 0, 0);
+        (scene == MENU_SCENE_PROMPT || !InterlockedCompareExchange(&gameplay_input_phase, 0, 0));
 
     menu_controller_action = 0;
 #ifdef MENU_CONTROLLER_TEST_BUILD
@@ -565,7 +573,7 @@ static BYTE __attribute__((thiscall)) trace_menu_action(void *frontend, DWORD pl
         if (menu_controller_grid_scene(menu_controller_scene) &&
             (action == MENU_ACTION_UP || action == MENU_ACTION_DOWN)) return pressed;
         if (menu_controller_scene == MENU_SCENE_MY_MVP && action == MENU_ACTION_CONFIRM) return pressed;
-        if (action == MENU_ACTION_CANCEL ||
+        if ((action == MENU_ACTION_CANCEL && menu_controller_scene != MENU_SCENE_PROMPT) ||
             (menu_controller_scene == MENU_SCENE_AUDIO && action == MENU_ACTION_CONFIRM)) {
             /* Stock Back and Audio Accept queue the action for the transition's
              * second poll later in this frame. */
@@ -638,6 +646,12 @@ static void install_menu_action_trace(BYTE *base)
     static const BYTE my_mvp_command_signature[] = {
         0x83, 0xec, 0x10, 0x8b, 0x44, 0x24, 0x14, 0x83, 0xe8, 0x00, 0x53, 0x8b, 0xd9
     };
+    static const BYTE prompt_accept_signature[] = {
+        0x53, 0x56, 0x57, 0x8b, 0x7c, 0x24, 0x10, 0x57, 0x8b, 0xf1, 0x33, 0xdb
+    };
+    static const BYTE prompt_cancel_signature[] = {
+        0x8b, 0x44, 0x24, 0x04, 0x56, 0x50, 0x8b, 0xf1, 0xe8, 0x03, 0x22, 0xff, 0xff
+    };
 
     if (menu_controller_enabled &&
         (!menu_trace_signature(base, MENU_SELECT_ROW_RVA, row_signature, sizeof(row_signature)) ||
@@ -671,6 +685,11 @@ static void install_menu_action_trace(BYTE *base)
             my_mvp_command_signature, sizeof(my_mvp_command_signature));
         log_line(menu_controller_my_mvp_enabled ? "menu controller my mvp enabled\n" :
             "menu controller my mvp disabled: unsupported command signature\n");
+        menu_controller_prompt_enabled =
+            menu_trace_signature(base, 0x0024ccf0, prompt_accept_signature, sizeof(prompt_accept_signature)) &&
+            menu_trace_signature(base, 0x0024cd90, prompt_cancel_signature, sizeof(prompt_cancel_signature));
+        log_line(menu_controller_prompt_enabled ? "menu controller prompts enabled\n" :
+            "menu controller prompts disabled: unsupported prompt handlers\n");
     }
     log_line(hook_function(base + 0x00242da0, trace_menu_frame, &menu_frame_original) > 0 ?
         "menu frame trace installed\n" : "menu frame trace hook unavailable\n");

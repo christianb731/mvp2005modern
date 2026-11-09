@@ -73,6 +73,7 @@ static WORD read_menu_test_buttons(DWORD scene, int eligible)
     if (!strcmp(scene_name, "my_mvp")) expected_scene = MENU_SCENE_MY_MVP;
     if (!strcmp(scene_name, "options")) expected_scene = MENU_SCENE_OPTIONS;
     if (!strcmp(scene_name, "audio")) expected_scene = MENU_SCENE_AUDIO;
+    if (!strcmp(scene_name, "prompt")) expected_scene = MENU_SCENE_PROMPT;
     if (eligible && expected_scene && expected_scene == scene) {
         for (size_t i = 0; i < sizeof(buttons) / sizeof(buttons[0]); ++i) {
             if (strcmp(button_name, buttons[i].name)) continue;
@@ -119,6 +120,7 @@ static void trace_menu_test_grid(void *grid, DWORD grid_class, DWORD scene, int 
     if (scene == MENU_SCENE_MY_MVP) prefix = "my_mvp ";
     if (scene == MENU_SCENE_OPTIONS) prefix = "options ";
     if (scene == MENU_SCENE_AUDIO) prefix = "audio ";
+    if (scene == MENU_SCENE_PROMPT) prefix = "prompt ";
     snprintf(line, sizeof(line), "menu test %sgrid row=%ld controller_focus=%d\n",
         prefix, (long)row, controller_focus);
     log_line(line);
