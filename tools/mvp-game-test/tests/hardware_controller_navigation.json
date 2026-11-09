@@ -1,0 +1,21 @@
+{
+  "name": "hardware_controller_navigation",
+  "description": "With a physical XInput controller connected, press D-pad Right when prompted in Team Select and verify native dispatch.",
+  "force_cleanup": true,
+  "capture_on_failure": true,
+  "steps": [
+    {"action": "launch"},
+    {"action": "wait_window", "timeout": 20},
+    {"action": "wait_log", "timeout": 8, "contains": "controller source: native XInput -> canonical MVP DIJOYSTATE"},
+    {"action": "wait_log", "contains": "class_rva=004b7900", "timeout": 25},
+    {"action": "wait_log", "source": "intro", "contains": "AUTO SKIP PASS", "timeout": 10},
+    {"action": "wait_pixels", "timeout": 18, "tolerance": 24, "samples": [[0.47, 0.462, 236, 237, 240], [0.53, 0.462, 243, 244, 245], [0.47, 0.472, 70, 70, 72], [0.53, 0.472, 70, 71, 72]]},
+    {"action": "click", "relative": true, "x": 0.41, "y": 0.5},
+    {"action": "wait_log", "contains": "class_rva=004b74b0", "timeout": 10},
+    {"action": "wait", "seconds": 1.5},
+    {"action": "click", "relative": true, "x": 0.27, "y": 0.325},
+    {"action": "wait_log", "contains": "class_rva=004bcdb8", "timeout": 10},
+    {"action": "wait_xinput_button", "button": "dpad_right", "timeout": 60},
+    {"action": "wait_log", "contains": "menu native actions player=0 pressed_mask=00000800", "timeout": 5}
+  ]
+}

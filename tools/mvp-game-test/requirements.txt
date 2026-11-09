@@ -1,0 +1,5 @@
+mcp>=1.26,<2
+ollama>=0.6,<1
+Pillow>=10,<13
+psutil>=5.9,<8
+pywin32>=306

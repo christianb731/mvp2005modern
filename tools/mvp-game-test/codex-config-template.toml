@@ -1,0 +1,20 @@
+[mcp_servers.mvp-game-test]
+command = "C:/AI/mvp-game-test/.venv/Scripts/python.exe"
+args = ["-B", "C:/AI/mvp-game-test/mvp_game_test.py"]
+cwd = "C:/AI/mvp-game-test"
+startup_timeout_sec = 30
+tool_timeout_sec = 240
+
+[mcp_servers.mvp-game-test.env]
+MVP_GAME_EXE = "C:/PATH/TO/PROJECT/.build/current-smoke-launcher/MVP2005Modern.exe"
+MVP_GAME_WORKDIR = "C:/PATH/TO/PROJECT/.build/current-smoke-launcher"
+MVP_GAME_ALLOWED_EXES = "C:/PATH/TO/PROJECT/.build/current-smoke-launcher/MVP2005Modern.exe;C:/PATH/TO/PROJECT/.build/smoke-game/MVP2005Smoke.exe"
+MVP_GAME_TESTS_DIR = "C:/AI/mvp-game-test/tests"
+MVP_GAME_ARTIFACT_DIR = "C:/AI/mvp-game-test/artifacts"
+
+# Optional and limited to the isolated smoke game and test-enabled launcher.
+MVP_GAME_MENU_TEST = "0"
+
+# Only used by the manual vision tools.
+OLLAMA_HOST = "http://127.0.0.1:11434"
+OLLAMA_VISION_MODEL = "qwen3-vl:8b"

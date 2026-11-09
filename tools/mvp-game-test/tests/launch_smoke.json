@@ -1,0 +1,13 @@
+{
+  "name": "launch_smoke",
+  "description": "Launch the current Modern build and verify fresh runtime injection and both borderless D3D8 startup devices.",
+  "force_cleanup": true,
+  "steps": [
+    {"action": "launch"},
+    {"action": "wait_window", "timeout": 30},
+    {"action": "wait_log", "contains": "mvp2005fix loaded", "timeout": 10},
+    {"action": "wait_log", "contains": "borderless CreateDevice succeeded", "timeout": 15},
+    {"action": "wait_log", "contains": "borderless CreateDevice succeeded", "timeout": 25},
+    {"action": "assert_window", "caption": false, "monitor_fill": true}
+  ]
+}

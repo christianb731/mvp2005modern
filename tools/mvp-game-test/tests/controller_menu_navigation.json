@@ -1,0 +1,30 @@
+{
+  "name": "controller_menu_navigation",
+  "description": "Use the isolated menu test provider to verify D-pad rows, Play Now and native Back from Team Select.",
+  "force_cleanup": true,
+  "capture_on_failure": true,
+  "steps": [
+    {"action": "launch"},
+    {"action": "wait_window", "timeout": 20},
+    {"action": "wait_log", "contains": "menu test input enabled for isolated MVP2005Smoke.exe", "timeout": 5},
+    {"action": "wait_log", "contains": "class_rva=004b7900", "timeout": 25},
+    {"action": "wait_log", "source": "intro", "contains": "AUTO SKIP PASS", "timeout": 10},
+    {"action": "wait_pixels", "timeout": 18, "tolerance": 24, "samples": [[0.47, 0.462, 236, 237, 240], [0.53, 0.462, 243, 244, 245], [0.47, 0.472, 70, 70, 72], [0.53, 0.472, 70, 71, 72]]},
+    {"action": "click", "relative": true, "x": 0.41, "y": 0.5},
+    {"action": "wait_log", "contains": "menu scene handled scene_rva=004b7900", "timeout": 5},
+    {"action": "wait_log", "contains": "menu test grid row=3 controller_focus=0", "timeout": 10},
+    {"action": "menu_input", "scene": "main", "button": "down"},
+    {"action": "wait_log", "contains": "menu test grid row=4 controller_focus=1", "timeout": 5},
+    {"action": "menu_input", "scene": "main", "button": "up"},
+    {"action": "wait_log", "contains": "menu test grid row=3 controller_focus=1", "timeout": 5},
+    {"action": "menu_input", "scene": "main", "button": "up"},
+    {"action": "menu_input", "scene": "main", "button": "up"},
+    {"action": "menu_input", "scene": "main", "button": "up"},
+    {"action": "wait_log", "contains": "menu test grid row=0 controller_focus=1", "timeout": 5},
+    {"action": "menu_input", "scene": "main", "button": "a"},
+    {"action": "wait_log", "contains": "class_rva=004bcdb8", "timeout": 10},
+    {"action": "menu_input", "scene": "team", "button": "b"},
+    {"action": "wait_log", "contains": "menu test team back handled", "timeout": 5},
+    {"action": "wait_log", "contains": "class_rva=004b74b0", "timeout": 10}
+  ]
+}

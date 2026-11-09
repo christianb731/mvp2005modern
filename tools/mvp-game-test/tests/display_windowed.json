@@ -1,0 +1,13 @@
+{
+  "name": "display_windowed",
+  "description": "Verify the windowed QA profile through fresh runtime startup, wrapper settings and Win32 geometry.",
+  "force_cleanup": true,
+  "steps": [
+    {"action": "launch"},
+    {"action": "wait_window", "timeout": 30},
+    {"action": "wait_log", "contains": "save=1 borderless=0", "timeout": 10},
+    {"action": "wait_log", "contains": "layout=1", "timeout": 15},
+    {"action": "wait_log", "contains": "CACHE ready source=\"frontend/movies/mvpintro.vp6\"", "timeout": 25, "source": "intro"},
+    {"action": "assert_display_profile", "mode": "windowed"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "display_fullscreen",
+  "description": "Verify the fullscreen QA profile through fresh runtime startup, wrapper settings and Win32 geometry.",
+  "force_cleanup": true,
+  "steps": [
+    {"action": "launch"},
+    {"action": "wait_window", "timeout": 30},
+    {"action": "wait_log", "contains": "save=1 borderless=0", "timeout": 10},
+    {"action": "wait_log", "contains": "CreateDevice intercepted", "timeout": 15},
+    {"action": "wait_log", "contains": "CACHE ready source=\"frontend/movies/mvpintro.vp6\"", "timeout": 40, "source": "intro"},
+    {"action": "assert_display_profile", "mode": "fullscreen"}
+  ]
+}

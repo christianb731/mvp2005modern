@@ -1,0 +1,1 @@
+Build trigger for the first MVP2005 Modern D3D8 borderless runtime artifact.
