@@ -578,7 +578,10 @@ PAD_BUTTONS = {
 }
 XINPUT_BUTTONS = {"dpad_up": 0x0001, "dpad_down": 0x0002, "dpad_left": 0x0004, "dpad_right": 0x0008,
                   "a": 0x1000, "b": 0x2000, "x": 0x4000, "y": 0x8000}
-MENU_SCENE_IDS = {"main": "004b74b0", "team": "004bcdb8", "title": "004b7900", "modes": "004a7db0"}
+MENU_SCENE_IDS = {
+    "main": "004b74b0", "team": "004bcdb8", "title": "004b7900", "modes": "004a7db0",
+    "my_mvp": "004b8020", "options": "004b71c0", "audio": "004bebf0",
+}
 
 
 @functools.cache

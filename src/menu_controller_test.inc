@@ -70,6 +70,9 @@ static WORD read_menu_test_buttons(DWORD scene, int eligible)
     if (!strcmp(scene_name, "team")) expected_scene = MENU_SCENE_TEAM;
     if (!strcmp(scene_name, "title")) expected_scene = MENU_SCENE_TITLE;
     if (!strcmp(scene_name, "modes")) expected_scene = MENU_SCENE_MODES;
+    if (!strcmp(scene_name, "my_mvp")) expected_scene = MENU_SCENE_MY_MVP;
+    if (!strcmp(scene_name, "options")) expected_scene = MENU_SCENE_OPTIONS;
+    if (!strcmp(scene_name, "audio")) expected_scene = MENU_SCENE_AUDIO;
     if (eligible && expected_scene && expected_scene == scene) {
         for (size_t i = 0; i < sizeof(buttons) / sizeof(buttons[0]); ++i) {
             if (strcmp(button_name, buttons[i].name)) continue;
@@ -91,16 +94,17 @@ static void trace_menu_test_grid(void *grid, DWORD grid_class, DWORD scene, int 
     static __thread DWORD previous_scene;
     static __thread LONG previous_row = -1;
     static __thread int previous_focus = -1;
-    static __thread int reported_unknown_modes_grid;
+    static __thread DWORD reported_unknown_grid_scene;
+    const char *prefix = "";
     LONG row;
     char line[128];
 
     if (!menu_test_input_path[0]) return;
     if (grid_class != MENU_ROW_GRID) {
-        if (scene == MENU_SCENE_MODES && !reported_unknown_modes_grid) {
-            reported_unknown_modes_grid = 1;
-            snprintf(line, sizeof(line), "menu test modes grid class=%08lx unsupported\n",
-                (unsigned long)grid_class);
+        if (scene != MENU_SCENE_MAIN && scene != reported_unknown_grid_scene) {
+            reported_unknown_grid_scene = scene;
+            snprintf(line, sizeof(line), "menu test scene=%08lx grid class=%08lx unsupported\n",
+                (unsigned long)scene, (unsigned long)grid_class);
             log_line(line);
         }
         return;
@@ -111,7 +115,11 @@ static void trace_menu_test_grid(void *grid, DWORD grid_class, DWORD scene, int 
     previous_scene = scene;
     previous_row = row;
     previous_focus = controller_focus;
+    if (scene == MENU_SCENE_MODES) prefix = "modes ";
+    if (scene == MENU_SCENE_MY_MVP) prefix = "my_mvp ";
+    if (scene == MENU_SCENE_OPTIONS) prefix = "options ";
+    if (scene == MENU_SCENE_AUDIO) prefix = "audio ";
     snprintf(line, sizeof(line), "menu test %sgrid row=%ld controller_focus=%d\n",
-        scene == MENU_SCENE_MODES ? "modes " : "", (long)row, controller_focus);
+        prefix, (long)row, controller_focus);
     log_line(line);
 }

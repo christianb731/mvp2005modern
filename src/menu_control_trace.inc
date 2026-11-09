@@ -22,6 +22,7 @@ static LONG menu_trace_archive_samples;
 static int menu_trace_actions_enabled;
 static int menu_controller_enabled;
 static int menu_controller_title_enabled;
+static int menu_controller_my_mvp_enabled;
 static MenuQueueActionFn menu_controller_queue_action;
 static int menu_trace_controls_enabled;
 static volatile LONG menu_pointer_messages;
@@ -36,6 +37,9 @@ enum {
     MENU_SCENE_TITLE = 0x004b7900,
     MENU_SCENE_MAIN = 0x004b74b0,
     MENU_SCENE_MODES = 0x004a7db0,
+    MENU_SCENE_MY_MVP = 0x004b8020,
+    MENU_SCENE_OPTIONS = 0x004b71c0,
+    MENU_SCENE_AUDIO = 0x004bebf0,
     MENU_SCENE_TEAM = 0x004bcdb8,
     MENU_SCENE_NAV = 0x004a5900,
     MENU_ROW_GRID = 0x0049f5d0,
@@ -44,6 +48,7 @@ enum {
     MENU_MAIN_ACTIVITY_RVA = 0x0028a460,
     MENU_NAV_ACTIVATE_RVA = 0x0023da50,
     MENU_QUEUE_ACTION_RVA = 0x001efee0,
+    MENU_MY_MVP_COMMAND_RVA = 0x002b9320,
     MENU_ACTION_CONFIRM = 1,
     MENU_ACTION_CANCEL = 2,
     MENU_ACTION_BACK = 5,
@@ -76,7 +81,44 @@ static int menu_controller_pointer_active(void)
 
 static int menu_controller_grid_scene(DWORD scene)
 {
-    return scene == MENU_SCENE_MAIN || scene == MENU_SCENE_MODES;
+    return scene == MENU_SCENE_MAIN || scene == MENU_SCENE_MODES ||
+        scene == MENU_SCENE_MY_MVP || scene == MENU_SCENE_OPTIONS || scene == MENU_SCENE_AUDIO;
+}
+
+static int menu_controller_list_matches(DWORD scene, const void *grid)
+{
+    static const struct { DWORD scene; SHORT bounds[4]; } lists[] = {
+        {MENU_SCENE_MODES, {322, 121, 243, 261}},
+        {MENU_SCENE_MY_MVP, {320, 191, 245, 124}},
+        {MENU_SCENE_OPTIONS, {82, 140, 245, 198}},
+    };
+
+    for (size_t i = 0; i < sizeof(lists) / sizeof(lists[0]); ++i) {
+        if (scene == lists[i].scene)
+            return !memcmp((const BYTE *)grid + 0x2a, lists[i].bounds, sizeof(lists[i].bounds));
+    }
+    return 0;
+}
+
+static BYTE menu_controller_confirm_my_mvp(void *grid, void *owner)
+{
+    void *entry = (*(void ***)owner)[0x108 / sizeof(void *)];
+    MenuQueueActionFn select;
+    LONG rows, columns, row, column;
+
+    /* The stock grid click sends command 1 to this owner. It reads the selected
+     * cell from the list initialized at owner+0x134. */
+    if (*(void **)((BYTE *)owner + 0x134) != grid || !(((const BYTE *)grid)[0x28] & 1) ||
+        gfx_caller_rva(entry) != MENU_MY_MVP_COMMAND_RVA) return 0;
+    memcpy(&rows, (const BYTE *)grid + 0x50, sizeof(rows));
+    memcpy(&columns, (const BYTE *)grid + 0x54, sizeof(columns));
+    memcpy(&row, (const BYTE *)grid + 0x68, sizeof(row));
+    memcpy(&column, (const BYTE *)grid + 0x6c, sizeof(column));
+    if (row < 0 || row >= rows || column < 0 || column >= columns) return 0;
+    menu_controller_action = 0;
+    memcpy(&select, &entry, sizeof(select));
+    select(owner, MENU_ACTION_CONFIRM, 0);
+    return 1;
 }
 
 static void menu_controller_move_row(void *grid, void *owner, DWORD scene)
@@ -180,26 +222,30 @@ static BYTE __attribute__((thiscall)) trace_menu_grid_dispatch(void *grid, void 
     void *entry = InterlockedCompareExchangePointer(&menu_grid_dispatch_original, NULL, NULL);
     DWORD scene_class = owner ? gfx_caller_rva(*(void **)owner) : 0xffffffffUL;
     DWORD grid_class = gfx_caller_rva(*(void **)grid);
-    static const SHORT modes_bounds[] = {322, 121, 243, 261};
-    int modes_grid = scene_class == MENU_SCENE_MODES &&
-        !memcmp((const BYTE *)grid + 0x2a, modes_bounds, sizeof(modes_bounds));
+    /* Audio's native directional handlers retrieve the list cached at +0x140. */
+    int list_matches = menu_controller_list_matches(scene_class, grid) ||
+        (scene_class == MENU_SCENE_AUDIO && *(void **)((BYTE *)owner + 0x140) == grid);
     SHORT bounds[4];
     BYTE handled;
 
     if (!entry) return 0;
     memcpy(&original, &entry, sizeof(original));
 #ifdef MENU_CONTROLLER_TEST_BUILD
-    if (scene_class == MENU_SCENE_MAIN || modes_grid)
+    if (scene_class == MENU_SCENE_MAIN || list_matches)
         trace_menu_test_grid(grid, grid_class, scene_class, menu_controller_grid_focus);
 #endif
     if (menu_controller_grid_focus && (scene_class == MENU_SCENE_MAIN ||
-        (modes_grid && grid_class == MENU_ROW_GRID))) {
+        (list_matches && grid_class == MENU_ROW_GRID))) {
         if (!menu_controller_pointer_active()) {
             /* The native directional actions scroll the grid. Select a row
              * through the same widget method used by the mouse instead. */
             if (menu_trace_frontend &&
                 (menu_controller_action == MENU_ACTION_UP || menu_controller_action == MENU_ACTION_DOWN)) {
                 menu_controller_move_row(grid, owner, scene_class);
+            }
+            if (menu_trace_frontend && scene_class == MENU_SCENE_MY_MVP &&
+                menu_controller_action == MENU_ACTION_CONFIRM) {
+                return menu_controller_confirm_my_mvp(grid, owner);
             }
             return 0;
         }
@@ -273,6 +319,8 @@ static DWORD menu_controller_active_scene(const DWORD *scenes, DWORD count)
 {
     DWORD scene = 0;
     int team_controls = 0;
+    int settings_controls = 0;
+    int team_or_settings_controls = 0;
 
     for (DWORD i = 0; i < count; ++i) {
         switch (scenes[i]) {
@@ -289,7 +337,14 @@ static DWORD menu_controller_active_scene(const DWORD *scenes, DWORD count)
             scene = scenes[i];
             break;
         case MENU_SCENE_MODES:
+        case MENU_SCENE_OPTIONS:
+        case MENU_SCENE_AUDIO:
             if (!menu_controller_queue_action) return 0;
+            if (scene) return 0;
+            scene = scenes[i];
+            break;
+        case MENU_SCENE_MY_MVP:
+            if (!menu_controller_my_mvp_enabled) return 0;
             /* fall through */
         case MENU_SCENE_MAIN:
         case MENU_SCENE_TEAM:
@@ -299,18 +354,31 @@ static DWORD menu_controller_active_scene(const DWORD *scenes, DWORD count)
         case 0x004a6458:
         case 0x004ba2e0:
         case 0x004a4fd0:
-        case 0x004a9aa0:
             team_controls = 1;
+            break;
+        case 0x004a9aa0:
+            team_or_settings_controls = 1;
+            break;
+        case 0x004a0de8:
+            settings_controls = 1;
             break;
         default:
             /* Other scenes include modal dialogs and the demo. */
             return 0;
         }
     }
-    return team_controls && scene != MENU_SCENE_TEAM ? 0 : scene;
+    if ((team_controls && scene != MENU_SCENE_TEAM) ||
+        (settings_controls && scene != MENU_SCENE_AUDIO) ||
+        (team_or_settings_controls && scene != MENU_SCENE_TEAM && scene != MENU_SCENE_AUDIO)) return 0;
+    return scene;
 }
 
-static void menu_controller_back_from_team(void *frontend)
+static int menu_controller_nav_back_scene(DWORD scene)
+{
+    return scene == MENU_SCENE_TEAM || scene == MENU_SCENE_MY_MVP;
+}
+
+static void menu_controller_back_via_nav(void *frontend, DWORD expected_scene)
 {
     /* Resolve the live navigation bar again after native dispatch in case
      * another input changed the screen or opened a dialog. */
@@ -319,7 +387,7 @@ static void menu_controller_back_from_team(void *frontend)
     const BYTE *manager = *(const BYTE **)((const BYTE *)frontend + 0xa0);
     static const SHORT back_bounds[] = {31, 418, 148, 29};
 
-    if (menu_controller_active_scene(scenes, count) != MENU_SCENE_TEAM ||
+    if (menu_controller_active_scene(scenes, count) != expected_scene ||
         GetForegroundWindow() != borderless_window) return;
     for (DWORD i = 0; i < count; ++i) {
         if (scenes[i] != MENU_SCENE_NAV) continue;
@@ -337,7 +405,10 @@ static void menu_controller_back_from_team(void *frontend)
             BYTE handled = activate(nav, button);
 #ifdef MENU_CONTROLLER_TEST_BUILD
             if (menu_test_input_path[0]) {
-                log_line(handled ? "menu test team back handled\n" : "menu test team back ignored\n");
+                char line[80];
+                snprintf(line, sizeof(line), "menu test %s back %s\n",
+                    expected_scene == MENU_SCENE_TEAM ? "team" : "my_mvp", handled ? "handled" : "ignored");
+                log_line(line);
             }
 #else
             (void)handled;
@@ -352,9 +423,9 @@ static void sample_menu_controller(const DWORD *scenes, DWORD count)
     static const struct {
         WORD button;
         DWORD action;
-        int team_only;
+        int left_right;
     } bindings[] = {
-        {CXINPUT_A, MENU_ACTION_CONFIRM, 0}, {CXINPUT_B, MENU_ACTION_BACK, 1},
+        {CXINPUT_A, MENU_ACTION_CONFIRM, 0},
         {CXINPUT_DPAD_UP, MENU_ACTION_UP, 0}, {CXINPUT_DPAD_DOWN, MENU_ACTION_DOWN, 0},
         {CXINPUT_DPAD_LEFT, 10, 1}, {CXINPUT_DPAD_RIGHT, 12, 1},
     };
@@ -416,13 +487,17 @@ static void sample_menu_controller(const DWORD *scenes, DWORD count)
         if (pressed & CXINPUT_A) menu_controller_action = MENU_ACTION_BACK;
         return;
     }
-    if (scene == MENU_SCENE_MODES && (pressed & CXINPUT_B)) {
-        menu_controller_action = MENU_ACTION_CANCEL;
+    if ((pressed & CXINPUT_B) && scene != MENU_SCENE_MAIN &&
+        (scene != MENU_SCENE_TEAM || !(pressed & CXINPUT_A))) {
+        menu_controller_action = menu_controller_nav_back_scene(scene) ? MENU_ACTION_BACK : MENU_ACTION_CANCEL;
         return;
     }
     for (size_t i = 0; i < sizeof(bindings) / sizeof(bindings[0]); ++i) {
-        if ((pressed & bindings[i].button) && (!bindings[i].team_only || scene == MENU_SCENE_TEAM)) {
-            if (menu_controller_grid_scene(scene) && bindings[i].action >= 6 &&
+        if ((pressed & bindings[i].button) &&
+            (!bindings[i].left_right || scene == MENU_SCENE_TEAM || scene == MENU_SCENE_AUDIO)) {
+            if (menu_controller_grid_scene(scene) &&
+                (bindings[i].action == MENU_ACTION_UP || bindings[i].action == MENU_ACTION_DOWN ||
+                    scene == MENU_SCENE_MY_MVP) &&
                 !menu_controller_grid_focus && GetCursorPos(&menu_pointer_position)) {
                 menu_pointer_seen = InterlockedCompareExchange(&menu_pointer_messages, 0, 0);
                 menu_controller_grid_focus = 1;
@@ -454,7 +529,7 @@ static void __attribute__((thiscall)) trace_menu_frame(void *frontend)
     memset(menu_trace_actions, 0, sizeof(menu_trace_actions));
     original(frontend);
     menu_trace_frontend = NULL;
-    if (menu_controller_back_requested) menu_controller_back_from_team(frontend);
+    if (menu_controller_back_requested) menu_controller_back_via_nav(frontend, menu_controller_scene);
     for (DWORD player = 0; menu_trace_actions_enabled && player < MENU_ACTION_PLAYERS; ++player) {
         DWORD pressed = menu_trace_actions[player] & ~menu_previous_actions[player];
         menu_previous_actions[player] = menu_trace_actions[player];
@@ -483,15 +558,17 @@ static BYTE __attribute__((thiscall)) trace_menu_action(void *frontend, DWORD pl
     if (menu_controller_enabled && player == 0 && action == menu_controller_action) {
         /* The original loop reaches this call after its pointer handlers. */
         menu_controller_action = 0;
-        if (action == MENU_ACTION_BACK && menu_controller_scene == MENU_SCENE_TEAM) {
+        if (action == MENU_ACTION_BACK && menu_controller_nav_back_scene(menu_controller_scene)) {
             menu_controller_back_requested = 1;
             return pressed;
         }
         if (menu_controller_grid_scene(menu_controller_scene) &&
             (action == MENU_ACTION_UP || action == MENU_ACTION_DOWN)) return pressed;
-        if (menu_controller_scene == MENU_SCENE_MODES && action == MENU_ACTION_CANCEL) {
-            /* The stock navigation button queues this action. The transition
-             * handler polls it again from a different call site in this frame. */
+        if (menu_controller_scene == MENU_SCENE_MY_MVP && action == MENU_ACTION_CONFIRM) return pressed;
+        if (action == MENU_ACTION_CANCEL ||
+            (menu_controller_scene == MENU_SCENE_AUDIO && action == MENU_ACTION_CONFIRM)) {
+            /* Stock Back and Audio Accept queue the action for the transition's
+             * second poll later in this frame. */
             if (pressed || ((const BYTE *)frontend)[0xc8]) return pressed;
             menu_controller_queue_action(frontend, action, player);
         }
@@ -558,6 +635,9 @@ static void install_menu_action_trace(BYTE *base)
     static const BYTE queue_action_tail[] = {
         0x89, 0x81, 0xcc, 0x00, 0x00, 0x00, 0x89, 0x91, 0xd0, 0x00, 0x00, 0x00, 0xc2, 0x08, 0x00
     };
+    static const BYTE my_mvp_command_signature[] = {
+        0x83, 0xec, 0x10, 0x8b, 0x44, 0x24, 0x14, 0x83, 0xe8, 0x00, 0x53, 0x8b, 0xd9
+    };
 
     if (menu_controller_enabled &&
         (!menu_trace_signature(base, MENU_SELECT_ROW_RVA, row_signature, sizeof(row_signature)) ||
@@ -587,6 +667,10 @@ static void install_menu_action_trace(BYTE *base)
         }
         log_line(menu_controller_queue_action ? "menu controller game modes enabled\n" :
             "menu controller game modes disabled: unsupported pending-action signature\n");
+        menu_controller_my_mvp_enabled = menu_trace_signature(base, MENU_MY_MVP_COMMAND_RVA,
+            my_mvp_command_signature, sizeof(my_mvp_command_signature));
+        log_line(menu_controller_my_mvp_enabled ? "menu controller my mvp enabled\n" :
+            "menu controller my mvp disabled: unsupported command signature\n");
     }
     log_line(hook_function(base + 0x00242da0, trace_menu_frame, &menu_frame_original) > 0 ?
         "menu frame trace installed\n" : "menu frame trace hook unavailable\n");

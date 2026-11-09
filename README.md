@@ -158,11 +158,13 @@ The runtime checks the executable's x86 code signatures before installing the ho
 
 ### Controller menu pilot and simulated input
 
-In the `v0.53-menu-controls` build, add `[MenuController]` with `Enabled=1` to the launcher INI to enable the pilot. While the borderless game has focus, press A at the title screen when **Click to Start** appears. Use D-pad Up and Down to select rows and A to confirm in Main Menu and Game Modes. Press B in Game Modes to return to Main Menu. Moving or clicking the mouse gives the pointer control again. Team Select uses the game's directional actions and its stock Back button handler.
+In the `v0.53-menu-controls` build, add `[MenuController]` with `Enabled=1` to the launcher INI to enable the pilot. While the borderless game has focus, press A at the title screen when **Click to Start** appears. Use D-pad Up and Down to select rows and A to confirm in Main Menu, Game Modes, My MVP, and Options. Press B to go back from Game Modes, My MVP, or Options. Moving or clicking the mouse gives the pointer control again. Team Select uses the game's directional actions and its stock Back button handler.
+
+In **Audio Options**, use Up and Down to select a volume, Left and Right to adjust it, A to accept, and B to go back. If B opens the game's discard-changes prompt, use the mouse for that prompt. The other Options categories still need controller coverage inside their settings screens.
 
 Game Modes uses the verified stock row grid at logical bounds `322,121 243x261`. D-pad navigation calls its native row selector. B queues the stock Back action so it remains available when the game's transition checks it again during the same frame. Wait for the screen's entrance animation before checking row changes.
 
-The separate local `v0.53-menu-controller-test` profile can replace the XInput sample with one simulated button at a time. Select the isolated `MVP2005Smoke.exe` copy, enable both `[MenuController]` and `[MenuControllerTest]` with `Enabled=1`, and set `[Debug] Logging=1` for diagnostics. With the smoke game in front, write an increasing serial number, the expected screen (`title`, `main`, `modes`, or `team`), and a button (`up`, `down`, `left`, `right`, `a`, or `b`) into `MVP2005Modern-MenuInput.txt` beside the launcher. Run this command from the launcher folder to simulate D-pad Down.
+The separate local `v0.53-menu-controller-test` profile can replace the XInput sample with one simulated button at a time. Select the isolated `MVP2005Smoke.exe` copy, enable both `[MenuController]` and `[MenuControllerTest]` with `Enabled=1`, and set `[Debug] Logging=1` for diagnostics. With the smoke game in front, write an increasing serial number, the expected screen (`title`, `main`, `modes`, `team`, `my_mvp`, `options`, or `audio`), and a button (`up`, `down`, `left`, `right`, `a`, or `b`) into `MVP2005Modern-MenuInput.txt` beside the launcher. Run this command from the launcher folder to simulate D-pad Down.
 
 ```powershell
 Set-Content -LiteralPath .\MVP2005Modern-MenuInput.txt -Encoding ascii '1 main down'
