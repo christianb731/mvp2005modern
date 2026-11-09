@@ -132,7 +132,7 @@ Apply `patches/apply_menu_aspect_preview.py` from the generated upstream directo
 
 The preview scales the completed 800x600 menu proportionally inside the borderless window. It uses black bars for the extra space and maps the mouse into the fitted area. Set `PreserveAspect=0` and relaunch to restore the normal stretched presentation.
 
-The preview launcher also exposes **Fill screen with menus**. Check it before launching to fill the window with the original menu artwork. This scales the 4:3 artwork to the display's aspect ratio. Clear it to use the proportional 4:3 fit.
+The preview launcher also exposes **Fill screen with menus**. Check it before launching to fill the window with the original menu artwork. This scales the 4:3 artwork to the display's aspect ratio. Clear it to use the proportional 4:3 fit. The launcher saves your choice in its own `mvp2005fix.ini` for the next launch.
 
 #### Check the transition back to the menu
 
