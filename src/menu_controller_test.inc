@@ -20,7 +20,7 @@ static int read_menu_test_command(unsigned long *serial, char *scene, char *butt
     if (!read || !length || length == sizeof(command) || memchr(command, 0, length)) return 0;
     command[length] = '\0';
     unsigned long parsed_serial;
-    if (sscanf(command, "%lu %7s %7s %c", &parsed_serial, scene, button, &extra) != 3 ||
+    if (sscanf(command, "%lu %8s %7s %c", &parsed_serial, scene, button, &extra) != 3 ||
         !parsed_serial || parsed_serial > 0x7fffffffUL) return 0;
     *serial = parsed_serial;
     return 1;
@@ -29,7 +29,7 @@ static int read_menu_test_command(unsigned long *serial, char *scene, char *butt
 static void init_menu_controller_test(const char *ini)
 {
     static const char filename[] = "MVP2005Modern-MenuInput.txt";
-    char executable[MAX_PATH], scene[8], button[8];
+    char executable[MAX_PATH], scene[9], button[8];
     DWORD length = GetModuleFileNameA(NULL, executable, sizeof(executable));
     const char *separator = strrchr(ini, '\\');
     size_t directory_length = separator ? (size_t)(separator + 1 - ini) : 0;
@@ -57,7 +57,7 @@ static WORD read_menu_test_buttons(DWORD scene, int eligible)
     };
     ULONGLONG now = GetTickCount64();
     unsigned long serial;
-    char scene_name[8], button_name[8], line[144];
+    char scene_name[9], button_name[8], line[144];
     DWORD expected_scene = 0;
 
     if (!eligible || now >= menu_test_release_at) menu_test_button = 0;
@@ -73,6 +73,7 @@ static WORD read_menu_test_buttons(DWORD scene, int eligible)
     if (!strcmp(scene_name, "my_mvp")) expected_scene = MENU_SCENE_MY_MVP;
     if (!strcmp(scene_name, "options")) expected_scene = MENU_SCENE_OPTIONS;
     if (!strcmp(scene_name, "audio")) expected_scene = MENU_SCENE_AUDIO;
+    if (!strcmp(scene_name, "gameplay")) expected_scene = MENU_SCENE_GAMEPLAY_OPTIONS;
     if (!strcmp(scene_name, "prompt")) expected_scene = MENU_SCENE_PROMPT;
     if (eligible && expected_scene && expected_scene == scene) {
         for (size_t i = 0; i < sizeof(buttons) / sizeof(buttons[0]); ++i) {
@@ -121,7 +122,14 @@ static void trace_menu_test_grid(void *grid, DWORD grid_class, DWORD scene, int 
     if (scene == MENU_SCENE_OPTIONS) prefix = "options ";
     if (scene == MENU_SCENE_AUDIO) prefix = "audio ";
     if (scene == MENU_SCENE_PROMPT) prefix = "prompt ";
-    snprintf(line, sizeof(line), "menu test %sgrid row=%ld controller_focus=%d\n",
-        prefix, (long)row, controller_focus);
+    if (scene == MENU_SCENE_GAMEPLAY_OPTIONS) {
+        LONG first;
+        memcpy(&first, (const BYTE *)grid + 0x70, sizeof(first));
+        snprintf(line, sizeof(line), "menu test gameplay grid row=%ld controller_focus=%d first=%ld\n",
+            (long)row, controller_focus, (long)first);
+    } else {
+        snprintf(line, sizeof(line), "menu test %sgrid row=%ld controller_focus=%d\n",
+            prefix, (long)row, controller_focus);
+    }
     log_line(line);
 }

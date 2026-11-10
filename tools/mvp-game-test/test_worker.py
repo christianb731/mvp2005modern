@@ -3,6 +3,7 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import mvp_game_test as agent
@@ -21,6 +22,16 @@ class RunSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Clean launch requires"):
                 agent._launch(agent.Run(self.target))
             popen.assert_not_called()
+
+    def test_reused_process_id_does_not_block_clean_launch(self):
+        replaced = agent.Process(30, 10, Path(r"C:\tools\tsserver.exe"), 2)
+        game = agent.Process(31, 11, self.target.game, 2)
+        candidates = [SimpleNamespace(pid=p.pid, info={"name": self.target.game.name})
+                      for p in (replaced, game)]
+        with (patch.object(agent.psutil, "process_iter", return_value=candidates) as scan,
+              patch.object(agent, "_process", side_effect=[replaced, game])):
+            self.assertEqual(agent._processes(self.target), [game])
+            scan.cache_clear.assert_called_once_with()
 
     def test_only_new_exact_child_can_be_the_game(self):
         launcher = agent.Process(40, 20, self.target.launch, 2)

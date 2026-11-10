@@ -187,6 +187,10 @@ def _process(pid: int) -> Process | None:
 def _processes(target: Target) -> list[Process]:
     names = {"mvp2005.exe", "mvp2005smoke.exe", "mvp2005modern.exe",
              target.launch.name.lower(), target.game.name.lower()}
+    # A long-running worker can see Windows reuse a cached process ID.
+    clear_cache = getattr(psutil.process_iter, "cache_clear", None)
+    if clear_cache is not None:
+        clear_cache()
     found = []
     for p in psutil.process_iter(["name"]):
         if (p.info["name"] or "").lower() in names:
@@ -194,7 +198,7 @@ def _processes(target: Target) -> list[Process]:
                 process = _process(p.pid)
             except (OSError, psutil.AccessDenied) as exc:
                 raise RuntimeError(f"Cannot verify executable identity for MVP-named PID {p.pid}") from exc
-            if process:
+            if process and process.path.name.lower() in names:
                 found.append(process)
     return found
 
@@ -581,6 +585,7 @@ XINPUT_BUTTONS = {"dpad_up": 0x0001, "dpad_down": 0x0002, "dpad_left": 0x0004, "
 MENU_SCENE_IDS = {
     "main": "004b74b0", "team": "004bcdb8", "title": "004b7900", "modes": "004a7db0",
     "my_mvp": "004b8020", "options": "004b71c0", "audio": "004bebf0", "prompt": "004a5ed8",
+    "gameplay": "004c0378",
 }
 
 

@@ -26,6 +26,7 @@ The worker reads the Modern launcher INI and verifies the executable shown in th
 | `controller_title_navigation` | Simulated controller input from Click to Start through Play Now and back from Team Select |
 | `controller_game_modes_navigation` | Game Modes row changes and screenshots, Exhibition entry, and the controller Back route |
 | `controller_audio_options_navigation` | My MVP and Options navigation, Audio Options row selection, volume change and restoration screenshots, and the return route |
+| `controller_gameplay_options_navigation` | Gameplay Options value change, scrolling beyond the first page, discard confirmation, and Accept |
 | `controller_discard_prompt` | Both answers in the Audio Options discard prompt and screenshots of the kept and discarded edit |
 | `controller_pause_quit_prompt` | Controller confirmation of the pause menu's Quit prompt and the return to Main Menu from a real 1920×1080 exhibition |
 | `game_modes_mouse_navigation` | Stock Game Modes hover selection and Back with the controller pilot enabled |
