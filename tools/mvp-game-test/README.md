@@ -27,6 +27,8 @@ The worker reads the Modern launcher INI and verifies the executable shown in th
 | `controller_game_modes_navigation` | Game Modes row changes and screenshots, Exhibition entry, and the controller Back route |
 | `controller_audio_options_navigation` | My MVP and Options navigation, Audio Options row selection, volume change and restoration screenshots, and the return route |
 | `controller_gameplay_options_navigation` | Gameplay Options value change, scrolling beyond the first page, discard confirmation, and Accept |
+| `controller_gameplay_tuning_navigation` | Difficulty changes with both bumpers, slider adjustment, scrolling, and discard confirmation |
+| `controller_video_options_navigation` | Video setting changes, the stock Auto-Detect action, discard confirmation, and Accept |
 | `controller_discard_prompt` | Both answers in the Audio Options discard prompt and screenshots of the kept and discarded edit |
 | `controller_pause_quit_prompt` | Controller confirmation of the pause menu's Quit prompt and the return to Main Menu from a real 1920×1080 exhibition |
 | `game_modes_mouse_navigation` | Stock Game Modes hover selection and Back with the controller pilot enabled |

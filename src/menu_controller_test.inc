@@ -48,12 +48,13 @@ static void init_menu_controller_test(const char *ini)
     log_line("menu test input enabled for isolated MVP2005Smoke.exe\n");
 }
 
-static WORD read_menu_test_buttons(DWORD scene, int eligible)
+static WORD read_menu_test_buttons(DWORD scene, int eligible, WORD supported)
 {
     static const struct { const char *name; WORD button; } buttons[] = {
         {"up", CXINPUT_DPAD_UP}, {"down", CXINPUT_DPAD_DOWN},
         {"left", CXINPUT_DPAD_LEFT}, {"right", CXINPUT_DPAD_RIGHT},
-        {"a", CXINPUT_A}, {"b", CXINPUT_B},
+        {"a", CXINPUT_A}, {"b", CXINPUT_B}, {"y", CXINPUT_Y},
+        {"lb", CXINPUT_LEFT_SHOULDER}, {"rb", CXINPUT_RIGHT_SHOULDER},
     };
     ULONGLONG now = GetTickCount64();
     unsigned long serial;
@@ -74,10 +75,12 @@ static WORD read_menu_test_buttons(DWORD scene, int eligible)
     if (!strcmp(scene_name, "options")) expected_scene = MENU_SCENE_OPTIONS;
     if (!strcmp(scene_name, "audio")) expected_scene = MENU_SCENE_AUDIO;
     if (!strcmp(scene_name, "gameplay")) expected_scene = MENU_SCENE_GAMEPLAY_OPTIONS;
+    if (!strcmp(scene_name, "tuning")) expected_scene = MENU_SCENE_GAMEPLAY_TUNING;
+    if (!strcmp(scene_name, "video")) expected_scene = MENU_SCENE_VIDEO;
     if (!strcmp(scene_name, "prompt")) expected_scene = MENU_SCENE_PROMPT;
     if (eligible && expected_scene && expected_scene == scene) {
         for (size_t i = 0; i < sizeof(buttons) / sizeof(buttons[0]); ++i) {
-            if (strcmp(button_name, buttons[i].name)) continue;
+            if (!(buttons[i].button & supported) || strcmp(button_name, buttons[i].name)) continue;
             menu_test_button = buttons[i].button;
             menu_test_release_at = now + 110;
             /* Give the controller edge detector at least one neutral frame before another command. */
@@ -95,10 +98,11 @@ static void trace_menu_test_grid(void *grid, DWORD grid_class, DWORD scene, int 
 {
     static __thread DWORD previous_scene;
     static __thread LONG previous_row = -1;
+    static __thread LONG previous_column = -1;
     static __thread int previous_focus = -1;
     static __thread DWORD reported_unknown_grid_scene;
     const char *prefix = "";
-    LONG row;
+    LONG row, column = -1;
     char line[128];
 
     if (!menu_test_input_path[0]) return;
@@ -113,20 +117,30 @@ static void trace_menu_test_grid(void *grid, DWORD grid_class, DWORD scene, int 
     }
     /* The mouse dispatcher compares its hit row to this field before selecting it. */
     memcpy(&row, (const BYTE *)grid + 0x68, sizeof(row));
-    if (scene == previous_scene && row == previous_row && controller_focus == previous_focus) return;
+    if (scene == MENU_SCENE_VIDEO) memcpy(&column, (const BYTE *)grid + 0x6c, sizeof(column));
+    if (scene == previous_scene && row == previous_row && column == previous_column &&
+        controller_focus == previous_focus) return;
     previous_scene = scene;
     previous_row = row;
+    previous_column = column;
     previous_focus = controller_focus;
     if (scene == MENU_SCENE_MODES) prefix = "modes ";
     if (scene == MENU_SCENE_MY_MVP) prefix = "my_mvp ";
     if (scene == MENU_SCENE_OPTIONS) prefix = "options ";
     if (scene == MENU_SCENE_AUDIO) prefix = "audio ";
     if (scene == MENU_SCENE_PROMPT) prefix = "prompt ";
-    if (scene == MENU_SCENE_GAMEPLAY_OPTIONS) {
+    if (scene == MENU_SCENE_GAMEPLAY_OPTIONS) prefix = "gameplay ";
+    if (scene == MENU_SCENE_GAMEPLAY_TUNING) prefix = "tuning ";
+    if (scene == MENU_SCENE_VIDEO) prefix = "video ";
+    if (scene == MENU_SCENE_GAMEPLAY_OPTIONS || scene == MENU_SCENE_GAMEPLAY_TUNING || scene == MENU_SCENE_VIDEO) {
         LONG first;
         memcpy(&first, (const BYTE *)grid + 0x70, sizeof(first));
-        snprintf(line, sizeof(line), "menu test gameplay grid row=%ld controller_focus=%d first=%ld\n",
-            (long)row, controller_focus, (long)first);
+        if (scene == MENU_SCENE_VIDEO)
+            snprintf(line, sizeof(line), "menu test video grid row=%ld controller_focus=%d first=%ld column=%ld\n",
+                (long)row, controller_focus, (long)first, (long)column);
+        else
+            snprintf(line, sizeof(line), "menu test %sgrid row=%ld controller_focus=%d first=%ld\n",
+                prefix, (long)row, controller_focus, (long)first);
     } else {
         snprintf(line, sizeof(line), "menu test %sgrid row=%ld controller_focus=%d\n",
             prefix, (long)row, controller_focus);

@@ -160,13 +160,15 @@ The runtime checks the executable's x86 code signatures before installing the ho
 
 In the `v0.53-menu-controls` build, add `[MenuController]` with `Enabled=1` to the launcher INI to enable the pilot. While the borderless game has focus, press A at the title screen when **Click to Start** appears. Use D-pad Up and Down to select rows and A to confirm in Main Menu, Game Modes, My MVP, and Options. Press B to go back from Game Modes, My MVP, or Options. Moving or clicking the mouse gives the pointer control again. Team Select uses the game's directional actions and its stock Back button handler.
 
-In **Audio Options** and **Gameplay Options**, use D-pad Up and Down to select a setting, Left and Right to adjust it, A to accept, and B to go back. In Gameplay Options, moving the highlight past the visible rows scrolls the list. If B opens the discard-changes prompt, choose No or Yes with the D-pad, then press A. No returns to the settings screen with edits pending. Yes discards the edits and returns to Options.
+In **Audio Options**, **Gameplay Options**, **Gameplay Tuning**, and **Video Options**, use D-pad Up and Down to select a setting, Left and Right to adjust it, A to accept, and B to go back. Moving the highlight past the visible rows scrolls long lists. If B opens the discard-changes prompt, choose No or Yes with the D-pad, then press A. No returns to the settings screen with edits pending. Yes discards the edits and returns to Options.
+
+In Gameplay Tuning, use the left and right bumpers to choose the difficulty whose sliders you want to edit. In Video Options, press Y to run the game's Auto-Detect.
 
 The same D-pad and A controls work in the Quit confirmation after it opens from an exhibition's pause menu.
 
 Game Modes uses the verified stock row grid at logical bounds `322,121 243x261`. D-pad navigation calls its native row selector. B queues the stock Back action so it remains available when the game's transition checks it again during the same frame. Wait for the screen's entrance animation before checking row changes.
 
-The separate local `v0.53-menu-controller-test` profile can replace the XInput sample with one simulated button at a time. Select the isolated `MVP2005Smoke.exe` copy, enable both `[MenuController]` and `[MenuControllerTest]` with `Enabled=1`, and set `[Debug] Logging=1` for diagnostics. With the smoke game in front, write an increasing serial number, the expected screen (`title`, `main`, `modes`, `team`, `my_mvp`, `options`, `audio`, `gameplay`, or `prompt`), and a button (`up`, `down`, `left`, `right`, `a`, or `b`) into `MVP2005Modern-MenuInput.txt` beside the launcher. Run this command from the launcher folder to simulate D-pad Down.
+The separate local `v0.53-menu-controller-test` profile can replace the XInput sample with one simulated button at a time. Select the isolated `MVP2005Smoke.exe` copy, enable both `[MenuController]` and `[MenuControllerTest]` with `Enabled=1`, and set `[Debug] Logging=1` for diagnostics. With the smoke game in front, write an increasing serial number, the expected screen (`title`, `main`, `modes`, `team`, `my_mvp`, `options`, `audio`, `gameplay`, `tuning`, `video`, or `prompt`), and a button (`up`, `down`, `left`, `right`, `a`, `b`, `lb`, `rb`, or `y`) into `MVP2005Modern-MenuInput.txt` beside the launcher. Run this command from the launcher folder to simulate D-pad Down.
 
 ```powershell
 Set-Content -LiteralPath .\MVP2005Modern-MenuInput.txt -Encoding ascii '1 main down'

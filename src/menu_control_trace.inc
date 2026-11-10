@@ -7,6 +7,10 @@ typedef BYTE (__attribute__((thiscall)) *MenuActionFn)(void *frontend, DWORD pla
 typedef void (__attribute__((thiscall)) *MenuSelectRowFn)(void *grid, LONG row);
 typedef BYTE (__attribute__((thiscall)) *MenuSceneActionFn)(void *scene, DWORD player);
 typedef void (__attribute__((thiscall)) *MenuQueueActionFn)(void *frontend, DWORD action, DWORD player);
+typedef void *(__attribute__((thiscall)) *MenuSelectedCellFn)(void *grid);
+typedef void *(__attribute__((thiscall)) *MenuFindControlFn)(void *group, const char *name, DWORD recursive);
+typedef void (__attribute__((thiscall)) *MenuPressControlFn)(void *control, DWORD play_sound);
+typedef void (__attribute__((thiscall)) *MenuReleaseControlFn)(void *control);
 static void *volatile menu_dispatch_original;
 static void *volatile menu_scene_dispatch_original;
 static void *volatile menu_grid_dispatch_original;
@@ -32,6 +36,7 @@ static __thread POINT menu_pointer_position;
 static __thread int menu_controller_grid_focus;
 static __thread void *menu_trace_frontend;
 static __thread DWORD menu_controller_action;
+static __thread DWORD menu_controller_video_action;
 static __thread int menu_controller_back_requested;
 
 enum {
@@ -42,10 +47,14 @@ enum {
     MENU_SCENE_OPTIONS = 0x004b71c0,
     MENU_SCENE_AUDIO = 0x004bebf0,
     MENU_SCENE_GAMEPLAY_OPTIONS = 0x004c0378,
+    MENU_SCENE_GAMEPLAY_TUNING = 0x004c04e0,
+    MENU_SCENE_VIDEO = 0x004b7330,
     MENU_SCENE_PROMPT = 0x004a5ed8,
     MENU_SCENE_TEAM = 0x004bcdb8,
     MENU_SCENE_NAV = 0x004a5900,
     MENU_ROW_GRID = 0x0049f5d0,
+    MENU_VALUE_SELECTOR = 0x0049fb60,
+    MENU_VIDEO_ARROW = 0x0049c1b8,
     MENU_NAV_BUTTON = 0x0049c2a0,
     MENU_SELECT_ROW_RVA = 0x0020ee60,
     MENU_SET_FIRST_ROW_RVA = 0x0020eee0,
@@ -53,11 +62,17 @@ enum {
     MENU_NAV_ACTIVATE_RVA = 0x0023da50,
     MENU_QUEUE_ACTION_RVA = 0x001efee0,
     MENU_MY_MVP_COMMAND_RVA = 0x002b9320,
+    MENU_VIDEO_CHANGE_RVA = 0x002b7340,
     MENU_ACTION_CONFIRM = 1,
     MENU_ACTION_CANCEL = 2,
+    MENU_ACTION_AUTO_DETECT = 3,
     MENU_ACTION_BACK = 5,
     MENU_ACTION_UP = 6,
-    MENU_ACTION_DOWN = 8
+    MENU_ACTION_DOWN = 8,
+    MENU_ACTION_LEFT = 10,
+    MENU_ACTION_RIGHT = 12,
+    MENU_ACTION_PREV_DIFFICULTY = 14,
+    MENU_ACTION_NEXT_DIFFICULTY = 16
 };
 
 #ifdef MENU_CONTROLLER_TEST_BUILD
@@ -85,7 +100,8 @@ static int menu_controller_pointer_active(void)
 
 static int menu_controller_settings_scene(DWORD scene)
 {
-    return scene == MENU_SCENE_AUDIO || scene == MENU_SCENE_GAMEPLAY_OPTIONS;
+    return scene == MENU_SCENE_AUDIO || scene == MENU_SCENE_GAMEPLAY_OPTIONS ||
+        scene == MENU_SCENE_GAMEPLAY_TUNING || scene == MENU_SCENE_VIDEO;
 }
 
 static int menu_controller_grid_scene(DWORD scene)
@@ -132,7 +148,7 @@ static BYTE menu_controller_confirm_my_mvp(void *grid, void *owner)
     return 1;
 }
 
-static void menu_controller_show_gameplay_row(void *grid, void **vtable, LONG row, LONG rows)
+static void menu_controller_show_settings_row(void *grid, void **vtable, LONG row, LONG rows)
 {
     void *entry = vtable[0x134 / sizeof(void *)];
     MenuSelectRowFn set_first_row;
@@ -146,6 +162,61 @@ static void menu_controller_show_gameplay_row(void *grid, void **vtable, LONG ro
     if (row >= first && row - first < visible) return;
     memcpy(&set_first_row, &entry, sizeof(set_first_row));
     set_first_row(grid, row < first ? row : row - visible + 1);
+}
+
+static void menu_controller_adjust_video(void *grid, void *owner, DWORD action)
+{
+    void **vtable = *(void ***)grid;
+    MenuSelectedCellFn selected_cell;
+    MenuFindControlFn find_control;
+    MenuPressControlFn press;
+    MenuReleaseControlFn release;
+    MenuDispatchFn notify_change;
+    LONG row, rows, column, columns;
+    void *entry = vtable[0x114 / sizeof(void *)];
+
+    /* Video's scene-wide Left/Right actions route column zero to resolution.
+     * Use the selected row's SG arrows, as the native settings controls do. */
+    if (gfx_caller_rva(entry) != 0x001f32d0) return;
+    memcpy(&row, (const BYTE *)grid + 0x68, sizeof(row));
+    memcpy(&rows, (const BYTE *)grid + 0x50, sizeof(rows));
+    memcpy(&column, (const BYTE *)grid + 0x6c, sizeof(column));
+    memcpy(&columns, (const BYTE *)grid + 0x54, sizeof(columns));
+    if (row < 0 || row >= rows || column < 0 || column >= columns) return;
+    memcpy(&selected_cell, &entry, sizeof(selected_cell));
+    void *cell = selected_cell(grid);
+    if (!cell) return;
+    entry = (*(void ***)cell)[0x80 / sizeof(void *)];
+    if (gfx_caller_rva(entry) != 0x001f4090) return;
+    memcpy(&find_control, &entry, sizeof(find_control));
+    void *selector = find_control(cell, "SG", 1);
+    if (!selector || gfx_caller_rva(*(void **)selector) != MENU_VALUE_SELECTOR) return;
+    vtable = *(void ***)selector;
+    int left = action == MENU_ACTION_LEFT;
+    size_t slot = (left ? 0x9c : 0x94) / sizeof(void *);
+    if (gfx_caller_rva(vtable[slot]) != (left ? 0x001f51b0 : 0x001f5140) ||
+        gfx_caller_rva(vtable[slot + 1]) != (left ? 0x001f5200 : 0x001f5190)) return;
+    BYTE *arrow = *(BYTE **)((BYTE *)selector + (left ? 0x48 : 0x44));
+    entry = (*(void ***)owner)[0x120 / sizeof(void *)];
+    if (gfx_caller_rva(entry) != MENU_VIDEO_CHANGE_RVA || !arrow ||
+        gfx_caller_rva(*(void **)arrow) != MENU_VIDEO_ARROW || !(arrow[0x28] & 1)) return;
+    memcpy(&press, &vtable[slot], sizeof(press));
+    memcpy(&release, &vtable[slot + 1], sizeof(release));
+    memcpy(&notify_change, &entry, sizeof(notify_change));
+    press(selector, 1);
+    release(selector);
+    /* The mouse also reports PREV/NEXT to the scene so Back sees pending edits. */
+    BYTE handled = notify_change(owner, arrow);
+#ifdef MENU_CONTROLLER_TEST_BUILD
+    if (menu_test_input_path[0]) {
+        char line[80];
+        snprintf(line, sizeof(line), "menu test video value action=%lu %s\n", (unsigned long)action,
+            handled ? "handled" : "ignored");
+        log_line(line);
+    }
+#else
+    (void)handled;
+#endif
 }
 
 static void menu_controller_move_row(void *grid, void *owner, DWORD scene)
@@ -169,9 +240,12 @@ static void menu_controller_move_row(void *grid, void *owner, DWORD scene)
             reset_idle(owner, 0);
         }
     }
-    if (next < 0 || next >= rows) return;
-    if (scene == MENU_SCENE_GAMEPLAY_OPTIONS)
-        menu_controller_show_gameplay_row(grid, vtable, next, rows);
+    if (next < 0 || next >= rows) {
+        if (scene != MENU_SCENE_VIDEO) return;
+        next = row;
+    }
+    if (menu_controller_settings_scene(scene))
+        menu_controller_show_settings_row(grid, vtable, next, rows);
     memcpy(&select_row, &vtable[0x10c / sizeof(void *)], sizeof(select_row));
     select_row(grid, next);
 }
@@ -251,9 +325,10 @@ static BYTE __attribute__((thiscall)) trace_menu_grid_dispatch(void *grid, void 
     void *entry = InterlockedCompareExchangePointer(&menu_grid_dispatch_original, NULL, NULL);
     DWORD scene_class = owner ? gfx_caller_rva(*(void **)owner) : 0xffffffffUL;
     DWORD grid_class = gfx_caller_rva(*(void **)grid);
-    /* The stock settings handlers retrieve the list cached at +0x140. */
+    /* Video keeps its list at +0x180. The other settings scenes use +0x140. */
     int list_matches = menu_controller_list_matches(scene_class, grid) ||
-        (menu_controller_settings_scene(scene_class) && *(void **)((BYTE *)owner + 0x140) == grid);
+        (menu_controller_settings_scene(scene_class) &&
+            *(void **)((BYTE *)owner + (scene_class == MENU_SCENE_VIDEO ? 0x180 : 0x140)) == grid);
     SHORT bounds[4];
     BYTE handled;
 
@@ -275,6 +350,12 @@ static BYTE __attribute__((thiscall)) trace_menu_grid_dispatch(void *grid, void 
             if (menu_trace_frontend && scene_class == MENU_SCENE_MY_MVP &&
                 menu_controller_action == MENU_ACTION_CONFIRM) {
                 return menu_controller_confirm_my_mvp(grid, owner);
+            }
+            if (menu_trace_frontend && scene_class == MENU_SCENE_VIDEO &&
+                (menu_controller_action == MENU_ACTION_LEFT || menu_controller_action == MENU_ACTION_RIGHT)) {
+                menu_controller_video_action = menu_controller_action;
+                menu_controller_action = 0;
+                menu_controller_adjust_video(grid, owner, menu_controller_video_action);
             }
             return 0;
         }
@@ -369,6 +450,8 @@ static DWORD menu_controller_active_scene(const DWORD *scenes, DWORD count)
         case MENU_SCENE_OPTIONS:
         case MENU_SCENE_AUDIO:
         case MENU_SCENE_GAMEPLAY_OPTIONS:
+        case MENU_SCENE_GAMEPLAY_TUNING:
+        case MENU_SCENE_VIDEO:
             if (!menu_controller_queue_action) return 0;
             if (scene) return 0;
             scene = scenes[i];
@@ -461,9 +544,9 @@ static void sample_menu_controller(const DWORD *scenes, DWORD count)
     } bindings[] = {
         {CXINPUT_A, MENU_ACTION_CONFIRM, 0},
         {CXINPUT_DPAD_UP, MENU_ACTION_UP, 0}, {CXINPUT_DPAD_DOWN, MENU_ACTION_DOWN, 0},
-        {CXINPUT_DPAD_LEFT, 10, 1}, {CXINPUT_DPAD_RIGHT, 12, 1},
+        {CXINPUT_DPAD_LEFT, MENU_ACTION_LEFT, 1}, {CXINPUT_DPAD_RIGHT, MENU_ACTION_RIGHT, 1},
     };
-    const WORD supported = CXINPUT_A | CXINPUT_B | CXINPUT_DPAD_UP | CXINPUT_DPAD_DOWN |
+    WORD supported = CXINPUT_A | CXINPUT_B | CXINPUT_DPAD_UP | CXINPUT_DPAD_DOWN |
         CXINPUT_DPAD_LEFT | CXINPUT_DPAD_RIGHT;
     DWORD scene = menu_controller_active_scene(scenes, count);
     DWORD slot = 4;
@@ -472,10 +555,15 @@ static void sample_menu_controller(const DWORD *scenes, DWORD count)
     int eligible = scene && borderless_window && GetForegroundWindow() == borderless_window &&
         (scene == MENU_SCENE_PROMPT || !InterlockedCompareExchange(&gameplay_input_phase, 0, 0));
 
+    if (scene == MENU_SCENE_GAMEPLAY_TUNING)
+        supported |= CXINPUT_LEFT_SHOULDER | CXINPUT_RIGHT_SHOULDER;
+    else if (scene == MENU_SCENE_VIDEO)
+        supported |= CXINPUT_Y;
     menu_controller_action = 0;
+    menu_controller_video_action = 0;
 #ifdef MENU_CONTROLLER_TEST_BUILD
     if (menu_test_input_path[0]) {
-        held = read_menu_test_buttons(scene, eligible);
+        held = read_menu_test_buttons(scene, eligible, supported);
         if (eligible) slot = 0;
     } else
 #endif
@@ -531,7 +619,7 @@ static void sample_menu_controller(const DWORD *scenes, DWORD count)
             (!bindings[i].left_right || scene == MENU_SCENE_TEAM || menu_controller_settings_scene(scene))) {
             if (menu_controller_grid_scene(scene) &&
                 (bindings[i].action == MENU_ACTION_UP || bindings[i].action == MENU_ACTION_DOWN ||
-                    scene == MENU_SCENE_MY_MVP) &&
+                    scene == MENU_SCENE_MY_MVP || (scene == MENU_SCENE_VIDEO && bindings[i].left_right)) &&
                 !menu_controller_grid_focus && GetCursorPos(&menu_pointer_position)) {
                 menu_pointer_seen = InterlockedCompareExchange(&menu_pointer_messages, 0, 0);
                 menu_controller_grid_focus = 1;
@@ -539,6 +627,12 @@ static void sample_menu_controller(const DWORD *scenes, DWORD count)
             menu_controller_action = bindings[i].action;
             return;
         }
+    }
+    if (scene == MENU_SCENE_GAMEPLAY_TUNING) {
+        if (pressed & CXINPUT_LEFT_SHOULDER) menu_controller_action = MENU_ACTION_PREV_DIFFICULTY;
+        else if (pressed & CXINPUT_RIGHT_SHOULDER) menu_controller_action = MENU_ACTION_NEXT_DIFFICULTY;
+    } else if (scene == MENU_SCENE_VIDEO && (pressed & CXINPUT_Y)) {
+        menu_controller_action = MENU_ACTION_AUTO_DETECT;
     }
 }
 
@@ -589,9 +683,12 @@ static BYTE __attribute__((thiscall)) trace_menu_action(void *frontend, DWORD pl
         action < 1 || action > MENU_ACTION_COUNT ||
         gfx_caller_rva(__builtin_return_address(0)) != 0x00242ecc) return pressed;
 
+    if (player == 0 && action == menu_controller_video_action) return 0;
     if (menu_controller_enabled && player == 0 && action == menu_controller_action) {
         /* The original loop reaches this call after its pointer handlers. */
         menu_controller_action = 0;
+        if (menu_controller_scene == MENU_SCENE_VIDEO &&
+            (action == MENU_ACTION_LEFT || action == MENU_ACTION_RIGHT)) return 0;
         if (action == MENU_ACTION_BACK && menu_controller_nav_back_scene(menu_controller_scene)) {
             menu_controller_back_requested = 1;
             return pressed;
@@ -608,7 +705,8 @@ static BYTE __attribute__((thiscall)) trace_menu_action(void *frontend, DWORD pl
         }
         if (action == menu_controller_release) {
             menu_controller_release = 0;
-        } else if (action >= 6 && action <= 12) {
+        } else if ((action >= 6 && action <= 12) || action == MENU_ACTION_PREV_DIFFICULTY ||
+                   action == MENU_ACTION_NEXT_DIFFICULTY) {
             menu_controller_release = action + 1;
         }
         pressed = 1;

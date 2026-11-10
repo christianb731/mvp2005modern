@@ -585,7 +585,7 @@ XINPUT_BUTTONS = {"dpad_up": 0x0001, "dpad_down": 0x0002, "dpad_left": 0x0004, "
 MENU_SCENE_IDS = {
     "main": "004b74b0", "team": "004bcdb8", "title": "004b7900", "modes": "004a7db0",
     "my_mvp": "004b8020", "options": "004b71c0", "audio": "004bebf0", "prompt": "004a5ed8",
-    "gameplay": "004c0378",
+    "gameplay": "004c0378", "tuning": "004c04e0", "video": "004b7330",
 }
 
 
@@ -996,7 +996,8 @@ def _step_valid(step: dict) -> None:
     ):
         raise ValueError("wait_log requires a known log source and a short literal")
     if action == "menu_input" and (
-        step["scene"] not in MENU_SCENE_IDS or step["button"] not in ("up", "down", "left", "right", "a", "b")
+        step["scene"] not in MENU_SCENE_IDS
+        or step["button"] not in ("up", "down", "left", "right", "a", "b", "y", "lb", "rb")
         or step.get("result", "accepted") not in ("accepted", "rejected")
     ):
         raise ValueError("Invalid menu_input scene, button or expected result")
